@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Julianne Edes</title>
+<meta name="description" content="Julianne Edes — Project / Product Coordinator">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%2316161a'/%3E%3Ctext%20x='16'%20y='23'%20font-family='monospace'%20font-size='17'%20font-weight='700'%20fill='%23d2601a'%20text-anchor='middle'%3Eje%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="wrap">
+
+  <main class="col-content">
+
+    <header class="intro">
+      <p class="kicker">~/julianne-edes<span class="cursor"></span></p>
+      <h1 class="name">hi ! i'm julianne :)</h1>
+      <p class="role">product &amp; project manager</p>
+    </header>
+
+    <section class="block">
+      <h2 class="label">// about me</h2>
+      <p class="bio">
+        i'm a product &amp; project manager who loves turning ideas into things
+        people actually use. lately i've been building an AI support platform,
+        thinking through features, workflows, and all the little details that
+        make a product feel great.
+      </p>
+      <p class="bio">
+        when i'm offline, i'm probably planning my next trip, watching horror
+        movies, or reading. always down to chat about cool ideas, projects, or
+        opportunities!
+      </p>
+    </section>
+
+    <section class="block">
+      <h2 class="label">// more</h2>
+
+      <ul class="links" id="links"></ul>
+      <p class="note" id="note" hidden></p>
+
+      <div class="now-panel" id="now-panel" hidden>
+        <ul class="now-list">
+          <li>
+            <span class="now-key">working on</span>
+            <span class="now-val">this website, plus an app that saves links &amp; posts from across social media into one place</span>
+          </li>
+          <li>
+            <span class="now-key">reading</span>
+            <span class="now-val">the haunting of hill house</span>
+          </li>
+          <li>
+            <span class="now-key">watching</span>
+            <span class="now-val">severance</span>
+          </li>
+          <li>
+            <span class="now-key">next trip</span>
+            <span class="now-val">japan</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2 class="label">// guestbook</h2>
+      <p class="meta">
+        visitor <span class="visit-count" id="visit-count">&hellip;</span> &middot;
+        drop your city and it gets pinned on the globe
+      </p>
+
+      <form class="guest-form" id="guest-form">
+        <div class="field">
+          <label for="guest-city">city</label>
+          <input type="text" id="guest-city" maxlength="60" placeholder="Toronto" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field">
+          <label for="guest-message">note</label>
+          <input type="text" id="guest-message" maxlength="140" placeholder="optional" autocomplete="off" spellcheck="false">
+        </div>
+        <button type="submit" id="guest-submit">sign</button>
+      </form>
+
+      <ul class="guest-list" id="guest-list">
+        <li class="guest-empty" id="guest-empty">no entries yet — be the first to sign</li>
+      </ul>
+    </section>
+
+  </main>
+
+  <aside class="col-globe">
+    <div class="globe-stage">
+      <canvas id="globe"></canvas>
+    </div>
+    <p class="globe-caption">
+      <span id="pin-count">0</span> cities pinned
+      <span class="globe-hint">&middot; drag to spin, scroll to zoom, hover a pin</span>
+    </p>
+  </aside>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
