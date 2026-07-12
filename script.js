@@ -1,3 +1,17 @@
+// ---- ascii-art portrait -------------------------------------------------
+(function loadPortrait() {
+  const el = document.getElementById('ascii-portrait');
+  if (!el) return;
+  fetch('assets/portrait.txt')
+    .then((r) => (r.ok ? r.text() : Promise.reject()))
+    .then((t) => {
+      el.textContent = t.replace(/\s+$/, '');
+    })
+    .catch(() => {
+      el.remove();
+    });
+})();
+
 // ---- content config ---------------------------------------------------
 const LINKS = [
   {
@@ -86,37 +100,24 @@ const Globe = (function initGlobe() {
 
   const loader = new THREE.TextureLoader();
 
-  const earthMat = new THREE.MeshPhongMaterial({
-    map: loader.load('assets/earth-map.jpg'),
-    normalMap: loader.load('assets/earth-bump.jpg'),
-    normalScale: new THREE.Vector2(0.55, 0.55),
-    specularMap: loader.load('assets/earth-spec.jpg'),
-    specular: new THREE.Color(0x2b2b2b),
-    shininess: 14,
+  // flat cartoon earth: single posterised map, soft matte shading
+  const earthMat = new THREE.MeshLambertMaterial({
+    map: loader.load('assets/earth-cartoon.png'),
   });
-  const earth = new THREE.Mesh(new THREE.SphereGeometry(R, 64, 64), earthMat);
+  const earth = new THREE.Mesh(new THREE.SphereGeometry(R, 48, 48), earthMat);
   globeGroup.add(earth);
 
-  const cloudMat = new THREE.MeshPhongMaterial({
-    map: loader.load('assets/earth-clouds.png'),
-    transparent: true,
-    opacity: 0.34,
-    depthWrite: false,
-  });
-  const clouds = new THREE.Mesh(new THREE.SphereGeometry(R * 1.012, 48, 48), cloudMat);
-  globeGroup.add(clouds);
-
-  // soft atmosphere rim
+  // soft cartoon outline / atmosphere rim
   const atmoMat = new THREE.MeshBasicMaterial({
-    color: 0x9dc4e8,
+    color: 0xbfe0f2,
     transparent: true,
-    opacity: 0.14,
+    opacity: 0.22,
     side: THREE.BackSide,
   });
-  scene.add(new THREE.Mesh(new THREE.SphereGeometry(R * 1.05, 48, 48), atmoMat));
+  scene.add(new THREE.Mesh(new THREE.SphereGeometry(R * 1.06, 48, 48), atmoMat));
 
-  scene.add(new THREE.AmbientLight(0xffffff, 0.62));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.05);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.82));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.5);
   sun.position.set(3, 1.4, 4);
   scene.add(sun);
 
@@ -347,7 +348,6 @@ const Globe = (function initGlobe() {
 
     globeGroup.rotation.x = rotation.x;
     globeGroup.rotation.y = rotation.y + spin;
-    clouds.rotation.y += 0.0002;
 
     // keep pins a roughly constant on-screen size as you zoom
     const now = performance.now();

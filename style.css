@@ -83,6 +83,24 @@ body {
   color: var(--text);
 }
 
+/* ---- ascii-art portrait ---- */
+.ascii-portrait {
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: clamp(3.4px, 0.92vw, 6px);
+  line-height: 1.28;
+  letter-spacing: 0;
+  white-space: pre;
+  color: var(--text);
+  margin: 4px 0 8px;
+  overflow-x: auto;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.ascii-portrait:empty {
+  display: none;
+}
+
 /* ---- blocks ---- */
 .block {
   margin-top: 52px;
