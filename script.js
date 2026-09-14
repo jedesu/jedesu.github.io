@@ -12,71 +12,117 @@
     });
 })();
 
-// ---- content config ---------------------------------------------------
-const LINKS = [
-  {
-    label: 'linkedin',
-    desc: '@julianneedes',
-    url: 'https://www.linkedin.com/in/julianneedes/',
-  },
-  {
-    label: 'resume',
-    desc: 'coming soon',
-    url: null,
-    message: 'resume not uploaded yet — check back soon.',
-  },
-  {
-    label: 'projects',
-    desc: 'coming soon',
-    url: null,
-    message: 'no projects listed yet — check back soon.',
-  },
-  {
-    label: 'currently',
-    desc: "what i'm up to",
-    toggle: 'now-panel',
-  },
-];
+// ---- desktop: draggable icons + draggable windows -------------------------
+(function initDesktop() {
+  const desktop = document.getElementById('desktop');
+  const icons = Array.from(document.querySelectorAll('.desktop-icon'));
+  const windows = {};
+  document.querySelectorAll('.window').forEach((w) => {
+    windows[w.dataset.window] = w;
+  });
 
-(function renderLinks() {
-  const list = document.getElementById('links');
-  const note = document.getElementById('note');
+  let topZ = 10;
 
-  LINKS.forEach((link) => {
-    const li = document.createElement('li');
-    const btn = document.createElement('button');
-    btn.type = 'button';
+  function bringToFront(el) {
+    topZ += 1;
+    el.style.zIndex = topZ;
+  }
 
-    const arrow = document.createElement('span');
-    arrow.className = 'arrow';
-    arrow.textContent = '→';
-
-    const label = document.createElement('span');
-    label.textContent = link.label;
-
-    const desc = document.createElement('span');
-    desc.className = 'desc';
-    desc.textContent = link.desc;
-
-    btn.append(arrow, label, desc);
-    btn.addEventListener('click', () => {
-      if (link.toggle) {
-        const panel = document.getElementById(link.toggle);
-        const opening = panel.hidden;
-        panel.hidden = !opening;
-        btn.classList.toggle('open', opening);
-        note.hidden = true;
-      } else if (link.url) {
-        window.open(link.url, '_blank', 'noopener');
-        note.hidden = true;
-      } else {
-        note.textContent = link.message;
-        note.hidden = false;
+  function openWindow(name) {
+    const win = windows[name];
+    if (!win) return;
+    if (win.hidden) {
+      win.hidden = false;
+      if (!win.dataset.placed) {
+        const openCount = document.querySelectorAll('.window:not([hidden])').length - 1;
+        win.style.left = Math.min(desktop.clientWidth - 320, 140 + openCount * 30) + 'px';
+        win.style.top = 60 + openCount * 30 + 'px';
+        win.dataset.placed = '1';
       }
+    }
+    bringToFront(win);
+  }
+
+  function closeWindow(name) {
+    const win = windows[name];
+    if (win) win.hidden = true;
+  }
+
+  // ---- lay icons out in a vertical column on the left ----
+  icons.forEach((icon, i) => {
+    icon.style.left = '24px';
+    icon.style.top = 24 + i * 100 + 'px';
+  });
+
+  // ---- generic drag helper: distinguishes a click from a drag ----
+  function makeDraggable(handle, target, { onClick, clamp } = {}) {
+    let dragging = false;
+    let moved = false;
+    let startX = 0;
+    let startY = 0;
+    let origLeft = 0;
+    let origTop = 0;
+
+    handle.addEventListener('pointerdown', (e) => {
+      if (e.button !== undefined && e.button !== 0) return;
+      dragging = true;
+      moved = false;
+      startX = e.clientX;
+      startY = e.clientY;
+      const rect = target.getBoundingClientRect();
+      const parentRect = target.offsetParent.getBoundingClientRect();
+      origLeft = rect.left - parentRect.left;
+      origTop = rect.top - parentRect.top;
+      handle.setPointerCapture(e.pointerId);
+      target.classList.add('dragging');
     });
 
-    li.appendChild(btn);
-    list.appendChild(li);
+    handle.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
+      let left = origLeft + dx;
+      let top = origTop + dy;
+      if (clamp) ({ left, top } = clamp(left, top));
+      target.style.left = left + 'px';
+      target.style.top = top + 'px';
+    });
+
+    function endDrag() {
+      if (!dragging) return;
+      dragging = false;
+      target.classList.remove('dragging');
+      if (!moved && onClick) onClick();
+    }
+
+    handle.addEventListener('pointerup', endDrag);
+    handle.addEventListener('pointercancel', endDrag);
+  }
+
+  icons.forEach((icon) => {
+    makeDraggable(icon, icon, {
+      onClick: () => openWindow(icon.dataset.window),
+      clamp: (left, top) => ({
+        left: Math.max(0, Math.min(left, Math.max(0, desktop.clientWidth - icon.offsetWidth))),
+        top: Math.max(0, Math.min(top, Math.max(0, desktop.clientHeight - icon.offsetHeight))),
+      }),
+    });
+  });
+
+  Object.values(windows).forEach((win) => {
+    const titlebar = win.querySelector('.window-titlebar');
+    const closeBtn = win.querySelector('.window-close');
+
+    makeDraggable(titlebar, win, {
+      clamp: (left, top) => ({
+        left: Math.max(0, Math.min(left, desktop.clientWidth - 80)),
+        top: Math.max(0, Math.min(top, desktop.clientHeight - 40)),
+      }),
+    });
+
+    win.addEventListener('pointerdown', () => bringToFront(win));
+    closeBtn.addEventListener('click', () => closeWindow(win.dataset.window));
   });
 })();
 

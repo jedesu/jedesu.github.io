@@ -25,6 +25,7 @@ body {
   font-size: 14px;
   line-height: 1.7;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
 html,
@@ -32,13 +33,125 @@ body {
   cursor: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='24'%20height='38'%20viewBox='0%200%2024%2038'%3E%3Cpath%20d='M0%200%20V32%20L8%2024%20L14%2036%20L18%2034%20L12%2022%20L22%2022%20Z'%20fill='%23fbfbf9'%20stroke='%2316161a'%20stroke-width='2.5'%20stroke-linejoin='round'/%3E%3C/svg%3E") 1 1, auto;
 }
 
-.wrap {
-  max-width: 640px;
-  margin: 0;
-  padding: 96px 32px 120px;
+/* ---- desktop surface ---- */
+.desktop {
+  position: relative;
+  min-height: 100vh;
+  width: 100%;
+  background-image: radial-gradient(var(--line) 1px, transparent 1px);
+  background-size: 28px 28px;
 }
 
-/* ---- intro ---- */
+/* ---- desktop icons ---- */
+.desktop-icon {
+  all: unset;
+  position: absolute;
+  width: 84px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 4px;
+  border-radius: 8px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.desktop-icon:hover,
+.desktop-icon:focus-visible {
+  background: var(--accent-soft);
+}
+
+.desktop-icon.dragging {
+  background: var(--accent-soft);
+  opacity: 0.85;
+}
+
+.desktop-icon svg {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+}
+
+.desktop-icon .icon-label {
+  font-size: 11px;
+  text-align: center;
+  line-height: 1.35;
+  color: var(--text);
+  word-break: break-word;
+}
+
+/* ---- windows ---- */
+.window {
+  position: absolute;
+  top: 60px;
+  left: 140px;
+  width: min(480px, calc(100vw - 32px));
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border: 1px solid var(--text);
+  border-radius: 8px;
+  box-shadow: 0 14px 44px rgba(20, 20, 24, 0.16);
+  overflow: hidden;
+}
+
+.window[hidden] {
+  display: none;
+}
+
+.window-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 8px 9px 14px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+  cursor: grab;
+  touch-action: none;
+  flex-shrink: 0;
+}
+
+.window-titlebar:active {
+  cursor: grabbing;
+}
+
+.window-close {
+  all: unset;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.window-close:hover,
+.window-close:focus-visible {
+  background: var(--accent);
+  color: #fff;
+}
+
+.window-body {
+  padding: 22px 24px 28px;
+  overflow-y: auto;
+}
+
+.empty-note {
+  color: var(--faint);
+  font-size: 13px;
+}
+
+/* ---- about window ---- */
 .kicker {
   color: var(--faint);
   font-size: 12.5px;
@@ -61,7 +174,7 @@ body {
 }
 
 .name {
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.25;
@@ -75,7 +188,6 @@ body {
 
 .bio {
   margin-top: 20px;
-  max-width: 46ch;
   color: var(--text);
 }
 
@@ -87,7 +199,7 @@ body {
   letter-spacing: 0;
   white-space: pre;
   color: var(--text);
-  margin: 4px 0 8px;
+  margin: 16px 0 4px;
   overflow-x: auto;
   -webkit-user-select: none;
   user-select: none;
@@ -97,91 +209,7 @@ body {
   display: none;
 }
 
-/* ---- blocks ---- */
-.block {
-  margin-top: 52px;
-}
-
-.label {
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--faint);
-  margin-bottom: 14px;
-}
-
-/* ---- links ---- */
-.links {
-  list-style: none;
-  border-top: 1px solid var(--line);
-}
-
-.links li {
-  border-bottom: 1px solid var(--line);
-}
-
-.links button {
-  all: unset;
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  width: 100%;
-  padding: 11px 4px;
-  font-family: inherit;
-  font-size: 14px;
-  transition: padding-left 0.14s ease, color 0.14s ease;
-}
-
-.links button:hover,
-.links button:focus-visible {
-  padding-left: 10px;
-  color: var(--accent);
-}
-
-.links .arrow {
-  display: inline-block;
-  color: var(--faint);
-  transition: color 0.14s ease, transform 0.16s ease;
-}
-
-.links button:hover .arrow,
-.links button:focus-visible .arrow {
-  color: var(--accent);
-}
-
-.links button.open .arrow {
-  transform: rotate(90deg);
-  color: var(--accent);
-}
-
-.links button.open {
-  color: var(--accent);
-}
-
-.links .desc {
-  margin-left: auto;
-  color: var(--faint);
-  font-size: 12.5px;
-}
-
-.note {
-  margin-top: 12px;
-  padding: 9px 12px;
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 12.5px;
-  border-radius: 4px;
-}
-
-/* ---- currently (collapsible under // more) ---- */
-.now-panel {
-  margin-top: 4px;
-  padding-left: 22px;
-}
-
-.now-panel[hidden] {
-  display: none;
-}
-
+/* ---- currently window ---- */
 .now-list {
   list-style: none;
 }
@@ -211,7 +239,38 @@ body {
   min-width: 0;
 }
 
-/* ---- guestbook ---- */
+/* ---- contact window ---- */
+.linkedin-link {
+  display: inline-block;
+  color: var(--accent);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.linkedin-link .desc {
+  color: var(--faint);
+  font-size: 12.5px;
+  margin-left: 8px;
+}
+
+.linkedin-link:hover,
+.linkedin-link:focus-visible {
+  text-decoration: underline;
+}
+
+.guestbook {
+  margin-top: 26px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.label {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--faint);
+  margin-bottom: 14px;
+}
+
 .meta {
   color: var(--muted);
   font-size: 12.5px;
@@ -235,7 +294,7 @@ body {
   flex-direction: column;
   gap: 5px;
   flex: 1;
-  min-width: 130px;
+  min-width: 120px;
 }
 
 .field label {
@@ -285,7 +344,7 @@ body {
 .guest-list {
   list-style: none;
   margin-top: 22px;
-  max-height: 200px;
+  max-height: 180px;
   overflow-y: auto;
 }
 
@@ -315,171 +374,22 @@ body {
 }
 
 /* ---- responsive ---- */
-@media (max-width: 820px) {
-  .wrap {
-    padding: 56px 24px 80px;
+@media (max-width: 560px) {
+  .window {
+    left: 16px !important;
+    width: calc(100vw - 32px);
   }
-}
-
-/* ---- weather widget ---- */
-.weather-widget {
-  position: fixed;
-  top: 22px;
-  right: 22px;
-  z-index: 200;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 7px 9px;
-  background: rgba(251, 251, 249, 0.9);
-  backdrop-filter: blur(6px);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-}
-
-.weather-label {
-  font-size: 11px;
-  color: var(--faint);
-  margin-right: 4px;
-  letter-spacing: 0.02em;
-}
-
-.weather-btn {
-  all: unset;
-  font-size: 15px;
-  line-height: 1;
-  padding: 5px 7px;
-  border-radius: 4px;
-  transition: background 0.14s ease, transform 0.14s ease;
-}
-
-.weather-btn:hover,
-.weather-btn:focus-visible {
-  background: var(--accent-soft);
-}
-
-.weather-btn.active {
-  background: var(--accent);
-  transform: scale(1.05);
-}
-
-.weather-clear {
-  color: var(--faint);
-  font-size: 13px;
-}
-
-/* full-screen canvas for particle effects (rain, wind streaks, hurricane vortex) */
-#weather-canvas {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  pointer-events: none;
-  z-index: 150;
-  display: none;
-}
-
-/* lightning flash */
-.weather-flash {
-  position: fixed;
-  inset: 0;
-  background: #fff;
-  opacity: 0;
-  pointer-events: none;
-  z-index: 160;
-}
-
-/* sunny glare overlay */
-.weather-glare {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 155;
-  opacity: 0;
-  background: radial-gradient(circle at 50% -10%, rgba(255,255,250,0.95), rgba(255,244,214,0.55) 38%, rgba(255,255,255,0) 72%);
-  transition: opacity 0.6s ease;
-}
-
-body.weather-sunny .weather-glare {
-  opacity: 1;
-}
-
-body.weather-sunny {
-  filter: brightness(1.55) contrast(0.85) saturate(0.75);
-  transition: filter 0.6s ease;
-}
-
-body.weather-sunny .wrap {
-  text-shadow: 0 0 14px rgba(255, 255, 255, 0.8);
-}
-
-/* windy sway — ambient base movement, always running while windy */
-@keyframes windy-sway {
-  0%   { transform: translateX(0) rotate(0deg) skewX(0deg); }
-  18%  { transform: translateX(11px) rotate(1.1deg) skewX(1.2deg); }
-  38%  { transform: translateX(-8px) rotate(-0.8deg) skewX(-0.8deg); }
-  56%  { transform: translateX(17px) rotate(1.8deg) skewX(1.6deg); }
-  74%  { transform: translateX(-12px) rotate(-1.2deg) skewX(-1deg); }
-  90%  { transform: translateX(6px) rotate(0.6deg) skewX(0.5deg); }
-  100% { transform: translateX(0) rotate(0deg) skewX(0deg); }
-}
-
-body.weather-windy .links li,
-body.weather-windy .now-list li,
-body.weather-windy .name,
-body.weather-windy .role,
-body.weather-windy .kicker,
-body.weather-windy .label,
-body.weather-windy .bio,
-body.weather-windy .meta,
-body.weather-windy .guest-item {
-  display: block;
-  animation: windy-sway 2.1s ease-in-out infinite;
-}
-
-/* stagger so items don't sway in unison */
-body.weather-windy .links li:nth-child(1) { animation-duration: 1.9s; animation-delay: 0s; }
-body.weather-windy .links li:nth-child(2) { animation-duration: 2.3s; animation-delay: 0.15s; }
-body.weather-windy .links li:nth-child(3) { animation-duration: 1.7s; animation-delay: 0.3s; }
-body.weather-windy .links li:nth-child(4) { animation-duration: 2.5s; animation-delay: 0.05s; }
-body.weather-windy .now-list li:nth-child(odd) { animation-duration: 2s; }
-body.weather-windy .now-list li:nth-child(even) { animation-duration: 2.6s; animation-delay: 0.2s; }
-body.weather-windy .bio:nth-of-type(1) { animation-duration: 2.8s; }
-body.weather-windy .bio:nth-of-type(2) { animation-duration: 2.2s; animation-delay: 0.25s; }
-
-/* windy gust — a stronger transient kick applied by JS when a swirl passes over an element */
-@keyframes windy-gust {
-  0%   { transform: translateX(0) rotate(0deg); }
-  25%  { transform: translateX(calc(38px * var(--gust-strength, 1))) rotate(calc(3.5deg * var(--gust-strength, 1))); }
-  55%  { transform: translateX(calc(-20px * var(--gust-strength, 1))) rotate(calc(-2deg * var(--gust-strength, 1))); }
-  100% { transform: translateX(0) rotate(0deg); }
-}
-
-.windy-gust {
-  animation: windy-gust 0.85s cubic-bezier(0.22, 0.7, 0.3, 1) !important;
-}
-
-/* hurricane: characters torn free of the page and flung around by the vortex */
-.hx-char {
-  position: fixed;
-  top: 0;
-  left: 0;
-  display: inline-block;
-  will-change: transform;
-  pointer-events: none;
-  z-index: 170;
-  font-family: inherit;
-}
-
-.hx-source.hx-hidden {
-  visibility: hidden;
 }
 
 /* ---- retro hand cursor on clickables (last so it wins the cascade) ---- */
 a,
 button,
 [role="button"],
-.links button,
 .guest-form button {
   cursor: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='26'%20height='34'%20viewBox='0%200%2026%2034'%3E%3Cpath%20d='M6%202%20L10%202%20L10%2012%20L14%2011%20L18%2011%20L21%2013%20L22%2016%20L22%2026%20L19%2030%20L8%2030%20L4%2024%20L2%2016%20L2%2013%20L6%2013%20Z'%20fill='%23fbfbf9'%20stroke='%2316161a'%20stroke-width='2.5'%20stroke-linejoin='round'/%3E%3C/svg%3E") 8 2, pointer;
+}
+
+.desktop-icon,
+.window-titlebar {
+  cursor: grab;
 }
