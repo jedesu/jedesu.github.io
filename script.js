@@ -35,8 +35,8 @@
       win.hidden = false;
       if (!win.dataset.placed) {
         const openCount = document.querySelectorAll('.window:not([hidden])').length - 1;
-        win.style.left = Math.min(desktop.clientWidth - 320, 140 + openCount * 30) + 'px';
-        win.style.top = 60 + openCount * 30 + 'px';
+        win.style.left = Math.min(desktop.clientWidth - 260, 110 + openCount * 24) + 'px';
+        win.style.top = 30 + openCount * 24 + 'px';
         win.dataset.placed = '1';
       }
     }
@@ -48,10 +48,13 @@
     if (win) win.hidden = true;
   }
 
-  // ---- lay icons out in a vertical column on the left ----
+  // ---- lay icons out in a grid on the left of the screen ----
+  const ICON_ROWS = 3;
   icons.forEach((icon, i) => {
-    icon.style.left = '24px';
-    icon.style.top = 24 + i * 100 + 'px';
+    const col = Math.floor(i / ICON_ROWS);
+    const row = i % ICON_ROWS;
+    icon.style.left = 16 + col * 96 + 'px';
+    icon.style.top = 16 + row * 92 + 'px';
   });
 
   // ---- generic drag helper: distinguishes a click from a drag ----

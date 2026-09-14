@@ -33,13 +33,90 @@ body {
   cursor: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='24'%20height='38'%20viewBox='0%200%2024%2038'%3E%3Cpath%20d='M0%200%20V32%20L8%2024%20L14%2036%20L18%2034%20L12%2022%20L22%2022%20Z'%20fill='%23fbfbf9'%20stroke='%2316161a'%20stroke-width='2.5'%20stroke-linejoin='round'/%3E%3C/svg%3E") 1 1, auto;
 }
 
-/* ---- desktop surface ---- */
+/* ---- retro pc chassis ---- */
+.pc-wrap {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 56px 16px;
+  background: linear-gradient(180deg, #EFECE3, #E4E0D3);
+}
+
+.pc {
+  position: relative;
+  width: min(760px, 94vw);
+  background: #E7E2D4;
+  border: 1px solid #C9C3B0;
+  border-radius: 22px;
+  padding: 16px 16px 22px;
+  box-shadow:
+    0 34px 64px rgba(20, 20, 24, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.pc-topbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 8px 14px;
+}
+
+.pc-led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #5FBF6B;
+  box-shadow: 0 0 7px rgba(95, 191, 107, 0.85);
+  flex-shrink: 0;
+}
+
+.pc-brand {
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  color: #8A8471;
+}
+
+.pc-stand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.pc-stand-neck {
+  width: 84px;
+  height: 28px;
+  background: #C9C3B0;
+  border: 1px solid #B7B199;
+  border-top: none;
+  clip-path: polygon(22% 0, 78% 0, 100% 100%, 0% 100%);
+}
+
+.pc-stand-base {
+  width: 210px;
+  height: 16px;
+  margin-top: -1px;
+  background: #C9C3B0;
+  border: 1px solid #B7B199;
+  border-radius: 7px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.16);
+}
+
+/* ---- desktop surface (the "screen") ---- */
 .desktop {
   position: relative;
-  min-height: 100vh;
   width: 100%;
+  height: clamp(420px, 62vh, 560px);
+  overflow: hidden;
   background-image: radial-gradient(var(--line) 1px, transparent 1px);
   background-size: 28px 28px;
+  background-color: var(--bg);
+  border: 10px solid #1C1B19;
+  border-radius: 10px;
+  box-shadow:
+    inset 0 0 0 2px #000,
+    inset 0 0 44px rgba(0, 0, 0, 0.28);
 }
 
 /* ---- desktop icons ---- */
@@ -85,10 +162,10 @@ body {
 /* ---- windows ---- */
 .window {
   position: absolute;
-  top: 60px;
-  left: 140px;
-  width: min(480px, calc(100vw - 32px));
-  max-height: 80vh;
+  top: 40px;
+  left: 100px;
+  width: min(400px, calc(100% - 24px));
+  max-height: calc(100% - 32px);
   display: flex;
   flex-direction: column;
   background: var(--bg);
@@ -375,9 +452,18 @@ body {
 
 /* ---- responsive ---- */
 @media (max-width: 560px) {
+  .pc {
+    padding: 12px 10px 16px;
+  }
+
+  .desktop {
+    height: clamp(380px, 68vh, 480px);
+  }
+
   .window {
-    left: 16px !important;
-    width: calc(100vw - 32px);
+    left: 8px !important;
+    top: 8px !important;
+    width: calc(100% - 16px);
   }
 }
 
