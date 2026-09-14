@@ -13,6 +13,19 @@
 </head>
 <body>
 
+<canvas id="weather-canvas"></canvas>
+<div class="weather-flash" id="weather-flash"></div>
+<div class="weather-glare" id="weather-glare"></div>
+
+<div class="weather-widget" id="weather-widget">
+  <span class="weather-label">weather</span>
+  <button type="button" class="weather-btn" data-mode="sunny" title="sunny">☀</button>
+  <button type="button" class="weather-btn" data-mode="rain" title="rain">🌧</button>
+  <button type="button" class="weather-btn" data-mode="windy" title="windy">💨</button>
+  <button type="button" class="weather-btn" data-mode="hurricane" title="hurricane">🌀</button>
+  <button type="button" class="weather-btn weather-clear" data-mode="clear" title="clear weather">✕</button>
+</div>
+
 <div class="wrap">
 
   <main class="col-content">
@@ -71,7 +84,7 @@
       <h2 class="label">// guestbook</h2>
       <p class="meta">
         visitor <span class="visit-count" id="visit-count">&hellip;</span> &middot;
-        drop your city and it gets pinned on the globe
+        drop your city and say hi
       </p>
 
       <form class="guest-form" id="guest-form">
@@ -93,22 +106,12 @@
 
   </main>
 
-  <aside class="col-globe">
-    <div class="globe-stage">
-      <canvas id="globe"></canvas>
-    </div>
-    <p class="globe-caption">
-      <span id="pin-count">0</span> cities pinned
-      <span class="globe-hint">&middot; drag to spin, scroll to zoom, hover a pin</span>
-    </p>
-  </aside>
-
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="firebase-config.js"></script>
 <script src="script.js"></script>
+<script src="weather.js"></script>
 </body>
 </html>
