@@ -34,7 +34,7 @@ body {
 
 .wrap {
   max-width: 640px;
-  margin: 0 auto;
+  margin: 0;
   padding: 96px 32px 120px;
 }
 
@@ -413,14 +413,15 @@ body.weather-sunny .wrap {
   text-shadow: 0 0 14px rgba(255, 255, 255, 0.8);
 }
 
-/* windy sway */
+/* windy sway — ambient base movement, always running while windy */
 @keyframes windy-sway {
-  0%   { transform: translateX(0) rotate(0deg); }
-  20%  { transform: translateX(6px) rotate(0.6deg); }
-  40%  { transform: translateX(-4px) rotate(-0.4deg); }
-  55%  { transform: translateX(10px) rotate(1deg); }
-  70%  { transform: translateX(-6px) rotate(-0.6deg); }
-  100% { transform: translateX(0) rotate(0deg); }
+  0%   { transform: translateX(0) rotate(0deg) skewX(0deg); }
+  18%  { transform: translateX(11px) rotate(1.1deg) skewX(1.2deg); }
+  38%  { transform: translateX(-8px) rotate(-0.8deg) skewX(-0.8deg); }
+  56%  { transform: translateX(17px) rotate(1.8deg) skewX(1.6deg); }
+  74%  { transform: translateX(-12px) rotate(-1.2deg) skewX(-1deg); }
+  90%  { transform: translateX(6px) rotate(0.6deg) skewX(0.5deg); }
+  100% { transform: translateX(0) rotate(0deg) skewX(0deg); }
 }
 
 body.weather-windy .links li,
@@ -428,18 +429,35 @@ body.weather-windy .now-list li,
 body.weather-windy .name,
 body.weather-windy .role,
 body.weather-windy .kicker,
-body.weather-windy .label {
+body.weather-windy .label,
+body.weather-windy .bio,
+body.weather-windy .meta,
+body.weather-windy .guest-item {
   display: block;
-  animation: windy-sway 2.6s ease-in-out infinite;
+  animation: windy-sway 2.1s ease-in-out infinite;
 }
 
 /* stagger so items don't sway in unison */
-body.weather-windy .links li:nth-child(1) { animation-duration: 2.3s; animation-delay: 0s; }
-body.weather-windy .links li:nth-child(2) { animation-duration: 2.7s; animation-delay: 0.15s; }
-body.weather-windy .links li:nth-child(3) { animation-duration: 2.1s; animation-delay: 0.3s; }
-body.weather-windy .links li:nth-child(4) { animation-duration: 2.9s; animation-delay: 0.05s; }
-body.weather-windy .now-list li:nth-child(odd) { animation-duration: 2.4s; }
-body.weather-windy .now-list li:nth-child(even) { animation-duration: 3.1s; animation-delay: 0.2s; }
+body.weather-windy .links li:nth-child(1) { animation-duration: 1.9s; animation-delay: 0s; }
+body.weather-windy .links li:nth-child(2) { animation-duration: 2.3s; animation-delay: 0.15s; }
+body.weather-windy .links li:nth-child(3) { animation-duration: 1.7s; animation-delay: 0.3s; }
+body.weather-windy .links li:nth-child(4) { animation-duration: 2.5s; animation-delay: 0.05s; }
+body.weather-windy .now-list li:nth-child(odd) { animation-duration: 2s; }
+body.weather-windy .now-list li:nth-child(even) { animation-duration: 2.6s; animation-delay: 0.2s; }
+body.weather-windy .bio:nth-of-type(1) { animation-duration: 2.8s; }
+body.weather-windy .bio:nth-of-type(2) { animation-duration: 2.2s; animation-delay: 0.25s; }
+
+/* windy gust — a stronger transient kick applied by JS when a swirl passes over an element */
+@keyframes windy-gust {
+  0%   { transform: translateX(0) rotate(0deg); }
+  25%  { transform: translateX(calc(38px * var(--gust-strength, 1))) rotate(calc(3.5deg * var(--gust-strength, 1))); }
+  55%  { transform: translateX(calc(-20px * var(--gust-strength, 1))) rotate(calc(-2deg * var(--gust-strength, 1))); }
+  100% { transform: translateX(0) rotate(0deg); }
+}
+
+.windy-gust {
+  animation: windy-gust 0.85s cubic-bezier(0.22, 0.7, 0.3, 1) !important;
+}
 
 /* hurricane: characters torn free of the page and flung around by the vortex */
 .hx-char {

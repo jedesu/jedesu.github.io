@@ -127,37 +127,100 @@
   }
 
   // ---- windy ----
+  // swirls of varying size drift across the screen; small ones move fast,
+  // big ones move slow. when a swirl passes near a piece of text, that
+  // element gets a one-off "gust" kick scaled to the swirl's size.
   function startWindy() {
     document.body.classList.add('weather-windy');
     canvas.style.display = 'block';
-    const streaks = [];
-    const COUNT = 40;
-    for (let i = 0; i < COUNT; i++) {
-      streaks.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        len: 30 + Math.random() * 70,
-        speed: 6 + Math.random() * 10,
-      });
+
+    function makeSwirl(xOverride) {
+      const size = 18 + Math.random() * 130;
+      const dir = Math.random() < 0.5 ? 1 : -1;
+      return {
+        x: xOverride !== undefined ? xOverride : Math.random() * canvas.width,
+        y: 30 + Math.random() * Math.max(1, canvas.height - 60),
+        size,
+        speed: ((2.4 + Math.random() * 3.4) * (150 / size)) * dir,
+        dir,
+        phase: Math.random() * Math.PI * 2,
+        spin: (0.05 + Math.random() * 0.11) * (Math.random() < 0.5 ? 1 : -1),
+        arms: 2 + Math.floor(Math.random() * 2),
+        bobPhase: Math.random() * Math.PI * 2,
+        bobAmp: 6 + Math.random() * 16,
+      };
     }
-    function frame() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.strokeStyle = 'rgba(150, 150, 160, 0.35)';
-      ctx.lineWidth = 1;
-      streaks.forEach((s) => {
+
+    const SWIRL_COUNT = 7;
+    const swirls = [];
+    for (let i = 0; i < SWIRL_COUNT; i++) swirls.push(makeSwirl());
+
+    function drawSwirl(s, t) {
+      const y = s.y + Math.sin(t * 0.002 + s.bobPhase) * s.bobAmp;
+      ctx.save();
+      ctx.translate(s.x, y);
+      ctx.rotate(s.phase);
+      ctx.strokeStyle = 'rgba(140, 140, 155, ' + Math.min(0.5, 0.14 + s.size / 300) + ')';
+      ctx.lineWidth = Math.max(1, s.size / 60);
+      const steps = 22;
+      const turns = 1.6;
+      for (let a = 0; a < s.arms; a++) {
+        const armAngle = (a / s.arms) * Math.PI * 2;
         ctx.beginPath();
-        ctx.moveTo(s.x, s.y);
-        ctx.lineTo(s.x + s.len, s.y + 4);
+        for (let i = 0; i <= steps; i++) {
+          const p = i / steps;
+          const ang = armAngle + p * turns * Math.PI * 2;
+          const r = p * s.size;
+          const x = Math.cos(ang) * r;
+          const yy = Math.sin(ang) * r * 0.55;
+          if (i === 0) ctx.moveTo(x, yy);
+          else ctx.lineTo(x, yy);
+        }
         ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function frame(t) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      swirls.forEach((s) => {
+        drawSwirl(s, t || 0);
+        s.phase += s.spin;
         s.x += s.speed;
-        if (s.x > canvas.width + s.len) {
-          s.x = -s.len;
-          s.y = Math.random() * canvas.height;
+        if (s.dir > 0 && s.x - s.size > canvas.width + 40) {
+          Object.assign(s, makeSwirl(-s.size - 40));
+        } else if (s.dir < 0 && s.x + s.size < -40) {
+          Object.assign(s, makeSwirl(canvas.width + s.size + 40));
         }
       });
       rafId = requestAnimationFrame(frame);
     }
-    frame();
+    rafId = requestAnimationFrame(frame);
+
+    // periodically check which text elements a swirl is passing over
+    const targets = Array.from(
+      document.querySelectorAll(
+        '.links li, .now-list li, .name, .role, .kicker, .label, .bio, .meta, .guest-item'
+      )
+    );
+    timers.push(
+      setInterval(() => {
+        swirls.forEach((s) => {
+          targets.forEach((el) => {
+            if (el.classList.contains('windy-gust')) return;
+            const r = el.getBoundingClientRect();
+            const dx = r.left + r.width / 2 - s.x;
+            const dy = r.top + r.height / 2 - s.y;
+            if (Math.hypot(dx, dy) < s.size * 0.9 + 30) {
+              const strength = Math.min(2.2, 0.6 + s.size / 70);
+              el.style.setProperty('--gust-strength', strength.toFixed(2));
+              el.classList.add('windy-gust');
+              setTimeout(() => el.classList.remove('windy-gust'), 850);
+            }
+          });
+        });
+      }, 220)
+    );
   }
 
   // ---- sunny ----
