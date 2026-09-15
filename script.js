@@ -12,6 +12,15 @@
     });
 })();
 
+// ---- shared drag state: the 3d tilt below reads this to freeze itself ----
+let pcDragging = false;
+const pcEl = document.querySelector('.pc');
+
+function setPcDragging(active) {
+  pcDragging = active;
+  if (pcEl) pcEl.classList.toggle('pc-flat', active);
+}
+
 // ---- desktop: draggable icons + draggable windows -------------------------
 (function initDesktop() {
   const desktop = document.getElementById('desktop');
@@ -48,13 +57,14 @@
     if (win) win.hidden = true;
   }
 
-  // ---- lay icons out in a grid on the left of the screen ----
+  // ---- lay icons out in a grid, sized as a % of the screen so it always fits ----
   const ICON_ROWS = 3;
+  const ICON_COLS = 2;
   icons.forEach((icon, i) => {
     const col = Math.floor(i / ICON_ROWS);
     const row = i % ICON_ROWS;
-    icon.style.left = 16 + col * 96 + 'px';
-    icon.style.top = 16 + row * 92 + 'px';
+    icon.style.left = (col * 100) / ICON_COLS + '%';
+    icon.style.top = (row * 100) / ICON_ROWS + '%';
   });
 
   // ---- generic drag helper: distinguishes a click from a drag ----
@@ -68,6 +78,7 @@
 
     handle.addEventListener('pointerdown', (e) => {
       if (e.button !== undefined && e.button !== 0) return;
+      if (e.target.closest('button') && e.target.closest('button') !== handle) return;
       dragging = true;
       moved = false;
       startX = e.clientX;
@@ -78,6 +89,7 @@
       origTop = rect.top - parentRect.top;
       handle.setPointerCapture(e.pointerId);
       target.classList.add('dragging');
+      setPcDragging(true);
     });
 
     handle.addEventListener('pointermove', (e) => {
@@ -96,6 +108,7 @@
       if (!dragging) return;
       dragging = false;
       target.classList.remove('dragging');
+      setPcDragging(false);
       if (!moved && onClick) onClick();
     }
 
@@ -255,4 +268,31 @@
 
   if (hasFirebase) firebaseMode();
   else localMode();
+})();
+
+// ---- 3d tilt: the monitor leans toward the cursor, flattens while dragging
+(function initTilt() {
+  const wrap = document.querySelector('.pc-wrap');
+  if (!wrap || !pcEl) return;
+
+  const MAX_RY = 12; // left/right, degrees
+  const MAX_RX = 8; // up/down, degrees
+
+  function reset() {
+    pcEl.style.setProperty('--rx', '0deg');
+    pcEl.style.setProperty('--ry', '0deg');
+  }
+
+  wrap.addEventListener('pointermove', (e) => {
+    if (pcDragging) return;
+    const rect = pcEl.getBoundingClientRect();
+    const px = (e.clientX - rect.left) / rect.width;
+    const py = (e.clientY - rect.top) / rect.height;
+    const ry = (Math.min(1, Math.max(0, px)) - 0.5) * MAX_RY;
+    const rx = (0.5 - Math.min(1, Math.max(0, py))) * MAX_RX;
+    pcEl.style.setProperty('--ry', ry.toFixed(2) + 'deg');
+    pcEl.style.setProperty('--rx', rx.toFixed(2) + 'deg');
+  });
+
+  wrap.addEventListener('pointerleave', reset);
 })();

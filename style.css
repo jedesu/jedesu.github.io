@@ -42,25 +42,39 @@ body {
   justify-content: center;
   padding: 56px 16px;
   background: linear-gradient(180deg, #EFECE3, #E4E0D3);
+  perspective: 1700px;
 }
 
 .pc {
   position: relative;
   width: min(760px, 94vw);
-  background: #E7E2D4;
-  border: 1px solid #C9C3B0;
-  border-radius: 22px;
-  padding: 16px 16px 22px;
-  box-shadow:
-    0 34px 64px rgba(20, 20, 24, 0.24),
-    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  transform-style: preserve-3d;
+  transform: rotateX(calc(5deg + var(--rx, 0deg))) rotateY(calc(-9deg + var(--ry, 0deg)));
+  transition: transform 0.3s ease-out;
+  will-change: transform;
+  filter: drop-shadow(0 30px 50px rgba(20, 20, 24, 0.28));
+}
+
+.pc.pc-flat {
+  transform: rotateX(0deg) rotateY(0deg);
+  transition: transform 0.2s ease-out;
+}
+
+.pc-wrap::after {
+  content: '';
+  display: block;
+  width: min(520px, 70vw);
+  height: 36px;
+  margin-top: -6px;
+  background: radial-gradient(ellipse at center, rgba(20, 20, 24, 0.22), transparent 72%);
+  filter: blur(2px);
 }
 
 .pc-topbar {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 2px 8px 14px;
+  padding: 2px 8px 10px;
 }
 
 .pc-led {
@@ -103,32 +117,61 @@ body {
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.16);
 }
 
-/* ---- desktop surface (the "screen") ---- */
-.desktop {
+/* ---- the 3d-rendered monitor + its screen overlay ---- */
+.pc-render-stage {
   position: relative;
   width: 100%;
-  height: clamp(420px, 62vh, 560px);
+  aspect-ratio: 693.8 / 533.18;
+}
+
+.pc-model {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  --poster-color: transparent;
+  background-color: transparent;
+  pointer-events: none;
+}
+
+/* ---- desktop surface (overlaid on the model's screen glass) ---- */
+.desktop {
+  position: absolute;
+  left: 35.5%;
+  top: 23.5%;
+  width: 34%;
+  height: 53%;
   overflow: hidden;
   background-image: radial-gradient(var(--line) 1px, transparent 1px);
-  background-size: 28px 28px;
+  background-size: 16px 16px;
   background-color: var(--bg);
-  border: 10px solid #1C1B19;
-  border-radius: 10px;
-  box-shadow:
-    inset 0 0 0 2px #000,
-    inset 0 0 44px rgba(0, 0, 0, 0.28);
+  border-radius: 2px;
+  box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.35);
+  container-type: inline-size;
+}
+
+.model-credit {
+  margin-top: 18px;
+  font-size: 10.5px;
+  color: #9A9584;
+  text-align: center;
+}
+
+.model-credit a {
+  color: #8A8471;
 }
 
 /* ---- desktop icons ---- */
 .desktop-icon {
   all: unset;
   position: absolute;
-  width: 84px;
+  width: 50%;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 8px 4px;
+  gap: 4%;
+  padding: 6% 4%;
   border-radius: 8px;
   touch-action: none;
   user-select: none;
@@ -146,15 +189,17 @@ body {
 }
 
 .desktop-icon svg {
-  width: 40px;
-  height: 40px;
+  width: 34cqw;
+  height: 34cqw;
+  max-width: 40px;
+  max-height: 40px;
   flex-shrink: 0;
 }
 
 .desktop-icon .icon-label {
-  font-size: 11px;
+  font-size: clamp(7px, 8.5cqw, 11px);
   text-align: center;
-  line-height: 1.35;
+  line-height: 1.3;
   color: var(--text);
   word-break: break-word;
 }
@@ -452,12 +497,13 @@ body {
 
 /* ---- responsive ---- */
 @media (max-width: 560px) {
-  .pc {
-    padding: 12px 10px 16px;
-  }
-
+  /* the icon grid + windows need more room than a tightly-cropped screen
+     overlay can give on a small phone, so trade bezel accuracy for space */
   .desktop {
-    height: clamp(380px, 68vh, 480px);
+    left: 12%;
+    top: 15%;
+    width: 76%;
+    height: 70%;
   }
 
   .window {
