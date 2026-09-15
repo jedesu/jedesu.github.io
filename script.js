@@ -12,137 +12,411 @@
     });
 })();
 
-// ---- shared drag state: the 3d tilt below reads this to freeze itself ----
-let pcDragging = false;
-const pcEl = document.querySelector('.pc');
+// ---- content config ---------------------------------------------------
+const LINKS = [
+  {
+    label: 'linkedin',
+    desc: '@julianneedes',
+    url: 'https://www.linkedin.com/in/julianneedes/',
+  },
+  {
+    label: 'resume',
+    desc: 'coming soon',
+    url: null,
+    message: 'resume not uploaded yet — check back soon.',
+  },
+  {
+    label: 'projects',
+    desc: 'coming soon',
+    url: null,
+    message: 'no projects listed yet — check back soon.',
+  },
+  {
+    label: 'currently',
+    desc: "what i'm up to",
+    toggle: 'now-panel',
+  },
+];
 
-function setPcDragging(active) {
-  pcDragging = active;
-  if (pcEl) pcEl.classList.toggle('pc-flat', active);
-}
+(function renderLinks() {
+  const list = document.getElementById('links');
+  const note = document.getElementById('note');
 
-// ---- desktop: draggable icons + draggable windows -------------------------
-(function initDesktop() {
-  const desktop = document.getElementById('desktop');
-  const icons = Array.from(document.querySelectorAll('.desktop-icon'));
-  const windows = {};
-  document.querySelectorAll('.window').forEach((w) => {
-    windows[w.dataset.window] = w;
-  });
+  LINKS.forEach((link) => {
+    const li = document.createElement('li');
+    const btn = document.createElement('button');
+    btn.type = 'button';
 
-  let topZ = 10;
+    const arrow = document.createElement('span');
+    arrow.className = 'arrow';
+    arrow.textContent = '→';
 
-  function bringToFront(el) {
-    topZ += 1;
-    el.style.zIndex = topZ;
-  }
+    const label = document.createElement('span');
+    label.textContent = link.label;
 
-  function openWindow(name) {
-    const win = windows[name];
-    if (!win) return;
-    if (win.hidden) {
-      win.hidden = false;
-      if (!win.dataset.placed) {
-        const openCount = document.querySelectorAll('.window:not([hidden])').length - 1;
-        win.style.left = Math.min(desktop.clientWidth - 260, 110 + openCount * 24) + 'px';
-        win.style.top = 30 + openCount * 24 + 'px';
-        win.dataset.placed = '1';
+    const desc = document.createElement('span');
+    desc.className = 'desc';
+    desc.textContent = link.desc;
+
+    btn.append(arrow, label, desc);
+    btn.addEventListener('click', () => {
+      if (link.toggle) {
+        const panel = document.getElementById(link.toggle);
+        const opening = panel.hidden;
+        panel.hidden = !opening;
+        btn.classList.toggle('open', opening);
+        note.hidden = true;
+      } else if (link.url) {
+        window.open(link.url, '_blank', 'noopener');
+        note.hidden = true;
+      } else {
+        note.textContent = link.message;
+        note.hidden = false;
       }
-    }
-    bringToFront(win);
-  }
-
-  function closeWindow(name) {
-    const win = windows[name];
-    if (win) win.hidden = true;
-  }
-
-  // ---- lay icons out in a grid, sized as a % of the screen so it always fits ----
-  const ICON_ROWS = 3;
-  const ICON_COLS = 2;
-  icons.forEach((icon, i) => {
-    const col = Math.floor(i / ICON_ROWS);
-    const row = i % ICON_ROWS;
-    icon.style.left = (col * 100) / ICON_COLS + '%';
-    icon.style.top = (row * 100) / ICON_ROWS + '%';
-  });
-
-  // ---- generic drag helper: distinguishes a click from a drag ----
-  function makeDraggable(handle, target, { onClick, clamp } = {}) {
-    let dragging = false;
-    let moved = false;
-    let startX = 0;
-    let startY = 0;
-    let origLeft = 0;
-    let origTop = 0;
-
-    handle.addEventListener('pointerdown', (e) => {
-      if (e.button !== undefined && e.button !== 0) return;
-      if (e.target.closest('button') && e.target.closest('button') !== handle) return;
-      dragging = true;
-      moved = false;
-      startX = e.clientX;
-      startY = e.clientY;
-      const rect = target.getBoundingClientRect();
-      const parentRect = target.offsetParent.getBoundingClientRect();
-      origLeft = rect.left - parentRect.left;
-      origTop = rect.top - parentRect.top;
-      handle.setPointerCapture(e.pointerId);
-      target.classList.add('dragging');
-      setPcDragging(true);
     });
 
-    handle.addEventListener('pointermove', (e) => {
-      if (!dragging) return;
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
-      let left = origLeft + dx;
-      let top = origTop + dy;
-      if (clamp) ({ left, top } = clamp(left, top));
-      target.style.left = left + 'px';
-      target.style.top = top + 'px';
-    });
-
-    function endDrag() {
-      if (!dragging) return;
-      dragging = false;
-      target.classList.remove('dragging');
-      setPcDragging(false);
-      if (!moved && onClick) onClick();
-    }
-
-    handle.addEventListener('pointerup', endDrag);
-    handle.addEventListener('pointercancel', endDrag);
-  }
-
-  icons.forEach((icon) => {
-    makeDraggable(icon, icon, {
-      onClick: () => openWindow(icon.dataset.window),
-      clamp: (left, top) => ({
-        left: Math.max(0, Math.min(left, Math.max(0, desktop.clientWidth - icon.offsetWidth))),
-        top: Math.max(0, Math.min(top, Math.max(0, desktop.clientHeight - icon.offsetHeight))),
-      }),
-    });
-  });
-
-  Object.values(windows).forEach((win) => {
-    const titlebar = win.querySelector('.window-titlebar');
-    const closeBtn = win.querySelector('.window-close');
-
-    makeDraggable(titlebar, win, {
-      clamp: (left, top) => ({
-        left: Math.max(0, Math.min(left, desktop.clientWidth - 80)),
-        top: Math.max(0, Math.min(top, desktop.clientHeight - 40)),
-      }),
-    });
-
-    win.addEventListener('pointerdown', () => bringToFront(win));
-    closeBtn.addEventListener('click', () => closeWindow(win.dataset.window));
+    li.appendChild(btn);
+    list.appendChild(li);
   });
 })();
 
-// ---- guestbook + visitor counter -----------------------------------------
+// ---- realistic globe -----------------------------------------------------
+const Globe = (function initGlobe() {
+  const canvas = document.getElementById('globe');
+  const stage = canvas.parentElement;
+
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 1000);
+  camera.position.z = 15.5;
+
+  const R = 5;
+  const ACCENT = 0xd2601a;
+
+  const globeGroup = new THREE.Group();
+  scene.add(globeGroup);
+
+  const loader = new THREE.TextureLoader();
+
+  // flat cartoon earth: single posterised map, soft matte shading
+  const earthMat = new THREE.MeshLambertMaterial({
+    map: loader.load('assets/earth-cartoon.png'),
+  });
+  const earth = new THREE.Mesh(new THREE.SphereGeometry(R, 48, 48), earthMat);
+  globeGroup.add(earth);
+
+  // soft cartoon outline / atmosphere rim
+  const atmoMat = new THREE.MeshBasicMaterial({
+    color: 0xbfe0f2,
+    transparent: true,
+    opacity: 0.22,
+    side: THREE.BackSide,
+  });
+  scene.add(new THREE.Mesh(new THREE.SphereGeometry(R * 1.06, 48, 48), atmoMat));
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.82));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.5);
+  sun.position.set(3, 1.4, 4);
+  scene.add(sun);
+
+  // ---- pins ----
+  const pinMat = new THREE.MeshBasicMaterial({ color: ACCENT });
+  const glowMat = new THREE.MeshBasicMaterial({
+    color: ACCENT,
+    transparent: true,
+    opacity: 0.28,
+  });
+  const pins = [];
+
+  function latLonToVec(lat, lon, radius) {
+    const phi = (lat * Math.PI) / 180;
+    const theta = ((lon - 180) * Math.PI) / 180;
+    return new THREE.Vector3(
+      -radius * Math.cos(phi) * Math.cos(theta),
+      radius * Math.sin(phi),
+      radius * Math.cos(phi) * Math.sin(theta)
+    );
+  }
+
+  function addPin(lat, lon, label) {
+    if (typeof lat !== 'number' || typeof lon !== 'number' || isNaN(lat) || isNaN(lon)) return;
+    const pos = latLonToVec(lat, lon, R * 1.01);
+
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 12), pinMat);
+    dot.position.copy(pos);
+    globeGroup.add(dot);
+
+    const glow = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 12), glowMat);
+    glow.position.copy(pos);
+    globeGroup.add(glow);
+
+    // a slightly larger invisible hit area so pins are easy to hover
+    const hit = new THREE.Mesh(
+      new THREE.SphereGeometry(0.32, 8, 8),
+      new THREE.MeshBasicMaterial({ visible: false })
+    );
+    hit.position.copy(pos);
+    hit.userData.label = label || '';
+    globeGroup.add(hit);
+
+    pins.push({ dot, glow, hit, born: performance.now() });
+    updatePinCount();
+  }
+
+  function clearPins() {
+    pins.forEach((p) => {
+      globeGroup.remove(p.dot);
+      globeGroup.remove(p.glow);
+      globeGroup.remove(p.hit);
+    });
+    pins.length = 0;
+    updatePinCount();
+  }
+
+  function updatePinCount() {
+    const el = document.getElementById('pin-count');
+    if (el) el.textContent = pins.length;
+  }
+
+  // ---- interaction ----
+  const rotation = { x: 0, y: 0 };
+  const target = { x: 0, y: 0 };
+  let dragging = false;
+  let last = { x: 0, y: 0 };
+  let autoRotate = true;
+
+  // zoom: camera distance from the globe centre
+  const MIN_Z = 6.4;   // close enough to skim the surface, never inside it
+  const MAX_Z = 24;
+  let zoom = 15.5;
+  let targetZoom = zoom;
+  let pinchStart = 0;
+  let pinchStartZoom = 0;
+
+  function setZoom(z) {
+    targetZoom = Math.max(MIN_Z, Math.min(MAX_Z, z));
+  }
+
+  function touchDistance(touches) {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.hypot(dx, dy);
+  }
+
+  function down(e) {
+    if (e.touches && e.touches.length === 2) {
+      dragging = false;
+      pinchStart = touchDistance(e.touches);
+      pinchStartZoom = targetZoom;
+      return;
+    }
+    dragging = true;
+    autoRotate = false;
+    const p = e.touches ? e.touches[0] : e;
+    last = { x: p.clientX, y: p.clientY };
+  }
+
+  function move(e) {
+    if (e.touches && e.touches.length === 2) {
+      if (pinchStart) {
+        e.preventDefault();
+        const ratio = touchDistance(e.touches) / pinchStart;
+        setZoom(pinchStartZoom / ratio);
+      }
+      return;
+    }
+    if (!dragging) return;
+    const p = e.touches ? e.touches[0] : e;
+    // slower rotation when zoomed in, so close-ups stay controllable
+    const speed = 0.005 * (zoom / 15.5);
+    target.y += (p.clientX - last.x) * speed;
+    target.x += (p.clientY - last.y) * speed;
+    target.x = Math.max(-1.1, Math.min(1.1, target.x));
+    last = { x: p.clientX, y: p.clientY };
+  }
+
+  function up() {
+    dragging = false;
+    pinchStart = 0;
+  }
+
+  canvas.addEventListener('mousedown', down);
+  window.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', up);
+  canvas.addEventListener('touchstart', down, { passive: true });
+  canvas.addEventListener('touchmove', move, { passive: false });
+  window.addEventListener('touchend', up);
+
+  canvas.addEventListener(
+    'wheel',
+    (e) => {
+      e.preventDefault();
+      autoRotate = false;
+      // normalise: trackpads report small deltas, mice report ~100
+      const step = Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY), 50) * 0.02;
+      setZoom(targetZoom + step);
+    },
+    { passive: false }
+  );
+
+  canvas.addEventListener('dblclick', () => setZoom(15.5));
+
+  // ---- pin hover tooltip ----
+  const tip = document.createElement('div');
+  tip.className = 'globe-tip';
+  tip.hidden = true;
+  stage.appendChild(tip);
+
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
+  let hoverPointer = null;
+
+  function onHoverMove(e) {
+    const rect = canvas.getBoundingClientRect();
+    hoverPointer = {
+      nx: ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      ny: -((e.clientY - rect.top) / rect.height) * 2 + 1,
+      lx: e.clientX - rect.left,
+      ly: e.clientY - rect.top,
+    };
+  }
+
+  function onHoverLeave() {
+    hoverPointer = null;
+    tip.hidden = true;
+  }
+
+  canvas.addEventListener('mousemove', onHoverMove);
+  canvas.addEventListener('mouseleave', onHoverLeave);
+
+  function updateTooltip() {
+    if (!hoverPointer || dragging) {
+      tip.hidden = true;
+      canvas.style.cursor = '';
+      return;
+    }
+    pointer.set(hoverPointer.nx, hoverPointer.ny);
+    raycaster.setFromCamera(pointer, camera);
+
+    // globe first, so we can tell if a pin is hidden behind the planet
+    const globeHit = raycaster.intersectObject(earth, false)[0];
+    const hitMeshes = pins.map((p) => p.hit);
+    const pinHits = raycaster.intersectObjects(hitMeshes, false);
+
+    let found = null;
+    for (const h of pinHits) {
+      if (!globeHit || h.distance <= globeHit.distance + 0.05) {
+        found = h.object.userData.label;
+        break;
+      }
+    }
+
+    if (found) {
+      tip.textContent = found;
+      tip.style.left = hoverPointer.lx + 'px';
+      tip.style.top = hoverPointer.ly + 'px';
+      tip.hidden = false;
+      canvas.style.cursor = 'pointer';
+    } else {
+      tip.hidden = true;
+      canvas.style.cursor = '';
+    }
+  }
+
+  function resize() {
+    const size = stage.clientWidth;
+    if (!size) return;
+    renderer.setSize(size, size, false);
+    camera.aspect = 1;
+    camera.updateProjectionMatrix();
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  let spin = 0;
+
+  function step() {
+    if (autoRotate) spin += 0.0012;
+
+    zoom += (targetZoom - zoom) * 0.1;
+    camera.position.z = zoom;
+
+    rotation.x += (target.x - rotation.x) * 0.08;
+    rotation.y += (target.y - rotation.y) * 0.08;
+
+    globeGroup.rotation.x = rotation.x;
+    globeGroup.rotation.y = rotation.y + spin;
+
+    // keep pins a roughly constant on-screen size as you zoom
+    const now = performance.now();
+    const pinScale = Math.max(0.4, zoom / 15.5);
+    pins.forEach((p) => {
+      p.dot.scale.setScalar(pinScale);
+      p.glow.scale.setScalar(pinScale * (1 + 0.28 * Math.sin((now - p.born) / 420)));
+    });
+
+    updateTooltip();
+
+    renderer.render(scene, camera);
+  }
+
+  function animate() {
+    requestAnimationFrame(animate);
+    step();
+  }
+  animate();
+
+  return {
+    addPin,
+    clearPins,
+    _debug: {
+      step,
+      getZoom: () => ({ zoom, targetZoom, cameraZ: camera.position.z, MIN_Z, MAX_Z }),
+      setZoom,
+      setRotation(x, y) {
+        autoRotate = false;
+        spin = 0;
+        target.x = rotation.x = x;
+        target.y = rotation.y = y;
+        globeGroup.rotation.set(x, y, 0);
+        globeGroup.updateMatrixWorld(true);
+      },
+      project(lat, lon) {
+        const v = latLonToVec(lat, lon, R * 1.01).clone();
+        globeGroup.updateMatrixWorld(true);
+        v.applyMatrix4(globeGroup.matrixWorld).project(camera);
+        const size = stage.clientWidth;
+        return {
+          x: (v.x * 0.5 + 0.5) * size,
+          y: (-v.y * 0.5 + 0.5) * size,
+          front: v.z < 1,
+        };
+      },
+    },
+  };
+})();
+
+// ---- geocoding (OpenStreetMap Nominatim) --------------------------------
+async function geocodeCity(city) {
+  try {
+    const res = await fetch(
+      'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' +
+        encodeURIComponent(city)
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (Array.isArray(data) && data[0]) {
+      return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+    }
+  } catch (e) {
+    /* offline or blocked — sign without a pin */
+  }
+  return null;
+}
+
+// ---- guestbook + visitor counter + city pins ----------------------------
 (function initGuestbook() {
   const countEl = document.getElementById('visit-count');
   const listEl = document.getElementById('guest-list');
@@ -150,6 +424,7 @@ function setPcDragging(active) {
   const formEl = document.getElementById('guest-form');
   const cityInput = document.getElementById('guest-city');
   const messageInput = document.getElementById('guest-message');
+  const submitBtn = document.getElementById('guest-submit');
 
   const hasFirebase =
     window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.apiKey && window.firebase;
@@ -172,15 +447,31 @@ function setPcDragging(active) {
     }
 
     listEl.prepend(li);
+
+    if (typeof entry.lat === 'number' && typeof entry.lon === 'number') {
+      const label = entry.message
+        ? `${entry.city} — ${entry.message}`
+        : entry.city;
+      Globe.addPin(entry.lat, entry.lon, label);
+    }
   }
 
-  function buildEntry() {
+  async function buildEntry() {
     const city = cityInput.value.trim();
     const message = messageInput.value.trim();
     if (!city) return null;
+
+    submitBtn.textContent = '...';
+    const entry = { city, message, lat: null, lon: null };
+    const coords = await geocodeCity(city);
+    if (coords) {
+      entry.lat = coords.lat;
+      entry.lon = coords.lon;
+    }
+    submitBtn.textContent = 'sign';
     cityInput.value = '';
     messageInput.value = '';
-    return { city, message };
+    return entry;
   }
 
   function localMode() {
@@ -200,9 +491,9 @@ function setPcDragging(active) {
 
     entries.slice().reverse().forEach(renderEntry);
 
-    formEl.addEventListener('submit', (e) => {
+    formEl.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const entry = buildEntry();
+      const entry = await buildEntry();
       if (!entry) return;
       entries.push(entry);
       localStorage.setItem(ENTRIES_KEY, JSON.stringify(entries));
@@ -240,6 +531,7 @@ function setPcDragging(active) {
         (snapshot) => {
           listEl.innerHTML = '';
           listEl.appendChild(emptyEl);
+          Globe.clearPins();
           if (snapshot.empty) {
             emptyEl.hidden = false;
             return;
@@ -252,14 +544,16 @@ function setPcDragging(active) {
         }
       );
 
-    formEl.addEventListener('submit', (e) => {
+    formEl.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const entry = buildEntry();
+      const entry = await buildEntry();
       if (!entry) return;
       guestbookRef
         .add({
           city: entry.city.slice(0, 60),
           message: (entry.message || '').slice(0, 140),
+          lat: entry.lat,
+          lon: entry.lon,
           createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         })
         .catch(() => {});
@@ -268,31 +562,4 @@ function setPcDragging(active) {
 
   if (hasFirebase) firebaseMode();
   else localMode();
-})();
-
-// ---- 3d tilt: the monitor leans toward the cursor, flattens while dragging
-(function initTilt() {
-  const wrap = document.querySelector('.pc-wrap');
-  if (!wrap || !pcEl) return;
-
-  const MAX_RY = 12; // left/right, degrees
-  const MAX_RX = 8; // up/down, degrees
-
-  function reset() {
-    pcEl.style.setProperty('--rx', '0deg');
-    pcEl.style.setProperty('--ry', '0deg');
-  }
-
-  wrap.addEventListener('pointermove', (e) => {
-    if (pcDragging) return;
-    const rect = pcEl.getBoundingClientRect();
-    const px = (e.clientX - rect.left) / rect.width;
-    const py = (e.clientY - rect.top) / rect.height;
-    const ry = (Math.min(1, Math.max(0, px)) - 0.5) * MAX_RY;
-    const rx = (0.5 - Math.min(1, Math.max(0, py))) * MAX_RX;
-    pcEl.style.setProperty('--ry', ry.toFixed(2) + 'deg');
-    pcEl.style.setProperty('--rx', rx.toFixed(2) + 'deg');
-  });
-
-  wrap.addEventListener('pointerleave', reset);
 })();

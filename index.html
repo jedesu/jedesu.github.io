@@ -9,72 +9,22 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=4">
-<script type="module" src="https://unpkg.com/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<div class="pc-wrap">
-<div class="pc">
-  <div class="pc-topbar">
-    <span class="pc-led"></span>
-    <span class="pc-brand">julianne-edes // OS</span>
-  </div>
+<div class="wrap">
 
-<div class="pc-render-stage">
-  <model-viewer
-    id="pc-model"
-    class="pc-model"
-    src="assets/models/crt-monitor.glb"
-    alt="a retro CRT computer monitor"
-    camera-orbit="180deg 90deg 130%"
-    field-of-view="18deg"
-    exposure="1.1"
-    shadow-intensity="1"
-    shadow-softness="0.9"
-    environment-image="neutral"
-    disable-zoom
-    interaction-prompt="none"
-  ></model-viewer>
+  <main class="col-content">
 
-<div class="desktop" id="desktop">
-
-  <!-- ---- icons ---- -->
-  <button type="button" class="desktop-icon" data-window="about" title="about.txt">
-    <svg viewBox="0 0 40 40" aria-hidden="true"><path d="M9 4h16l6 6v26a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" fill="var(--bg)" stroke="var(--text)" stroke-width="2" stroke-linejoin="round"/><path d="M25 4v6h6" fill="none" stroke="var(--text)" stroke-width="2" stroke-linejoin="round"/></svg>
-    <span class="icon-label">about.txt</span>
-  </button>
-
-  <button type="button" class="desktop-icon" data-window="currently" title="currently.txt">
-    <svg viewBox="0 0 40 40" aria-hidden="true"><path d="M9 4h16l6 6v26a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" fill="var(--bg)" stroke="var(--text)" stroke-width="2" stroke-linejoin="round"/><path d="M25 4v6h6" fill="none" stroke="var(--text)" stroke-width="2" stroke-linejoin="round"/></svg>
-    <span class="icon-label">currently.txt</span>
-  </button>
-
-  <button type="button" class="desktop-icon" data-window="projects" title="projects">
-    <svg viewBox="0 0 40 40" aria-hidden="true"><path d="M4 10a2 2 0 0 1 2-2h9l3 4h16a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" fill="var(--bg)" stroke="var(--text)" stroke-width="2" stroke-linejoin="round"/></svg>
-    <span class="icon-label">projects</span>
-  </button>
-
-  <button type="button" class="desktop-icon" data-window="resume" title="resume.pdf">
-    <svg viewBox="0 0 40 40" aria-hidden="true"><path d="M9 4h16l6 6v26a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" fill="var(--bg)" stroke="var(--text)" stroke-width="2" stroke-linejoin="round"/><path d="M25 4v6h6" fill="none" stroke="var(--text)" stroke-width="2" stroke-linejoin="round"/></svg>
-    <span class="icon-label">resume.pdf</span>
-  </button>
-
-  <button type="button" class="desktop-icon" data-window="contact" title="contact">
-    <svg viewBox="0 0 40 40" aria-hidden="true"><rect x="6" y="6" width="28" height="28" rx="4" fill="var(--bg)" stroke="var(--text)" stroke-width="2"/><circle cx="20" cy="17" r="5" fill="none" stroke="var(--text)" stroke-width="2"/><path d="M10 30c1-5 6-8 10-8s9 3 10 8" fill="none" stroke="var(--text)" stroke-width="2" stroke-linecap="round"/></svg>
-    <span class="icon-label">contact</span>
-  </button>
-
-  <!-- ---- windows ---- -->
-  <div class="window" id="window-about" data-window="about" hidden>
-    <div class="window-titlebar">
-      <span class="window-title">about.txt</span>
-      <button type="button" class="window-close" aria-label="close">×</button>
-    </div>
-    <div class="window-body">
+    <header class="intro">
       <p class="kicker">~/julianne-edes<span class="cursor"></span></p>
       <h1 class="name">hi ! i'm julianne :)</h1>
       <p class="role">product &amp; project manager</p>
+    </header>
+
+    <section class="block">
+      <h2 class="label">// about me</h2>
       <pre class="ascii-portrait" id="ascii-portrait" role="img" aria-label="ascii-art portrait of julianne"></pre>
       <p class="bio">
         i'm a product &amp; project manager who loves turning ideas into things
@@ -87,108 +37,75 @@
         movies, or reading. always down to chat about cool ideas, projects, or
         opportunities!
       </p>
-    </div>
-  </div>
+    </section>
 
-  <div class="window" id="window-currently" data-window="currently" hidden>
-    <div class="window-titlebar">
-      <span class="window-title">currently.txt</span>
-      <button type="button" class="window-close" aria-label="close">×</button>
-    </div>
-    <div class="window-body">
-      <ul class="now-list">
-        <li>
-          <span class="now-key">working on</span>
-          <span class="now-val">this website, plus an app that saves links &amp; posts from across social media into one place</span>
-        </li>
-        <li>
-          <span class="now-key">reading</span>
-          <span class="now-val">the haunting of hill house</span>
-        </li>
-        <li>
-          <span class="now-key">watching</span>
-          <span class="now-val">severance</span>
-        </li>
-        <li>
-          <span class="now-key">next trip</span>
-          <span class="now-val">japan</span>
-        </li>
-      </ul>
-    </div>
-  </div>
+    <section class="block">
+      <h2 class="label">// more</h2>
 
-  <div class="window" id="window-projects" data-window="projects" hidden>
-    <div class="window-titlebar">
-      <span class="window-title">projects</span>
-      <button type="button" class="window-close" aria-label="close">×</button>
-    </div>
-    <div class="window-body">
-      <p class="empty-note">no projects listed yet — check back soon.</p>
-    </div>
-  </div>
+      <ul class="links" id="links"></ul>
+      <p class="note" id="note" hidden></p>
 
-  <div class="window" id="window-resume" data-window="resume" hidden>
-    <div class="window-titlebar">
-      <span class="window-title">resume.pdf</span>
-      <button type="button" class="window-close" aria-label="close">×</button>
-    </div>
-    <div class="window-body">
-      <p class="empty-note">resume not uploaded yet — check back soon.</p>
-    </div>
-  </div>
-
-  <div class="window" id="window-contact" data-window="contact" hidden>
-    <div class="window-titlebar">
-      <span class="window-title">contact</span>
-      <button type="button" class="window-close" aria-label="close">×</button>
-    </div>
-    <div class="window-body">
-      <a class="linkedin-link" href="https://www.linkedin.com/in/julianneedes/" target="_blank" rel="noopener">
-        → linkedin <span class="desc">@julianneedes</span>
-      </a>
-
-      <div class="guestbook">
-        <h2 class="label">// guestbook</h2>
-        <p class="meta">
-          visitor <span class="visit-count" id="visit-count">&hellip;</span> &middot;
-          drop your city and say hi
-        </p>
-
-        <form class="guest-form" id="guest-form">
-          <div class="field">
-            <label for="guest-city">city</label>
-            <input type="text" id="guest-city" maxlength="60" placeholder="Toronto" autocomplete="off" spellcheck="false">
-          </div>
-          <div class="field">
-            <label for="guest-message">note</label>
-            <input type="text" id="guest-message" maxlength="140" placeholder="optional" autocomplete="off" spellcheck="false">
-          </div>
-          <button type="submit" id="guest-submit">sign</button>
-        </form>
-
-        <ul class="guest-list" id="guest-list">
-          <li class="guest-empty" id="guest-empty">no entries yet — be the first to sign</li>
+      <div class="now-panel" id="now-panel" hidden>
+        <ul class="now-list">
+          <li>
+            <span class="now-key">working on</span>
+            <span class="now-val">this website, plus an app that saves links &amp; posts from across social media into one place</span>
+          </li>
+          <li>
+            <span class="now-key">reading</span>
+            <span class="now-val">the haunting of hill house</span>
+          </li>
+          <li>
+            <span class="now-key">watching</span>
+            <span class="now-val">severance</span>
+          </li>
+          <li>
+            <span class="now-key">next trip</span>
+            <span class="now-val">japan</span>
+          </li>
         </ul>
       </div>
+    </section>
+
+    <section class="block">
+      <h2 class="label">// guestbook</h2>
+      <p class="meta">
+        visitor <span class="visit-count" id="visit-count">&hellip;</span> &middot;
+        drop your city and it gets pinned on the globe
+      </p>
+
+      <form class="guest-form" id="guest-form">
+        <div class="field">
+          <label for="guest-city">city</label>
+          <input type="text" id="guest-city" maxlength="60" placeholder="Toronto" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field">
+          <label for="guest-message">note</label>
+          <input type="text" id="guest-message" maxlength="140" placeholder="optional" autocomplete="off" spellcheck="false">
+        </div>
+        <button type="submit" id="guest-submit">sign</button>
+      </form>
+
+      <ul class="guest-list" id="guest-list">
+        <li class="guest-empty" id="guest-empty">no entries yet — be the first to sign</li>
+      </ul>
+    </section>
+
+  </main>
+
+  <aside class="col-globe">
+    <div class="globe-stage">
+      <canvas id="globe"></canvas>
     </div>
-  </div>
+    <p class="globe-caption">
+      <span id="pin-count">0</span> cities pinned
+      <span class="globe-hint">&middot; drag to spin, scroll to zoom, hover a pin</span>
+    </p>
+  </aside>
 
 </div>
 
-</div>
-
-</div>
-
-<div class="pc-stand">
-  <div class="pc-stand-neck"></div>
-  <div class="pc-stand-base"></div>
-</div>
-
-<p class="model-credit">
-  monitor model by <a href="https://poly.pizza/m/8jVB0zIXKCv" target="_blank" rel="noopener">Jarlan Perez</a>, CC-BY via Poly Pizza
-</p>
-</div>
-
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="firebase-config.js"></script>
