@@ -18,12 +18,12 @@ const LINKS = [
     label: 'linkedin',
     desc: '@julianneedes',
     url: 'https://www.linkedin.com/in/julianneedes/',
+    tooltip: 'best way to reach me',
   },
   {
     label: 'resume',
-    desc: 'coming soon',
-    url: null,
-    message: 'resume not uploaded yet — check back soon.',
+    desc: 'view pdf',
+    url: 'assets/julianne-edes-resume.pdf',
   },
   {
     label: 'projects',
@@ -46,6 +46,7 @@ const LINKS = [
     const li = document.createElement('li');
     const btn = document.createElement('button');
     btn.type = 'button';
+    if (link.tooltip) btn.title = link.tooltip;
 
     const arrow = document.createElement('span');
     arrow.className = 'arrow';

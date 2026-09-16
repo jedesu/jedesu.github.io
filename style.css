@@ -27,11 +27,6 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-html,
-body {
-  cursor: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='24'%20height='38'%20viewBox='0%200%2024%2038'%3E%3Cpath%20d='M0%200%20V32%20L8%2024%20L14%2036%20L18%2034%20L12%2022%20L22%2022%20Z'%20fill='%23fbfbf9'%20stroke='%2316161a'%20stroke-width='2.5'%20stroke-linejoin='round'/%3E%3C/svg%3E") 1 1, auto;
-}
-
 .wrap {
   max-width: 1060px;
   margin: 0 auto;
@@ -391,11 +386,3 @@ body {
   }
 }
 
-/* ---- retro hand cursor on clickables (last so it wins the cascade) ---- */
-a,
-button,
-[role="button"],
-.links button,
-.guest-form button {
-  cursor: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='26'%20height='34'%20viewBox='0%200%2026%2034'%3E%3Cpath%20d='M6%202%20L10%202%20L10%2012%20L14%2011%20L18%2011%20L21%2013%20L22%2016%20L22%2026%20L19%2030%20L8%2030%20L4%2024%20L2%2016%20L2%2013%20L6%2013%20Z'%20fill='%23fbfbf9'%20stroke='%2316161a'%20stroke-width='2.5'%20stroke-linejoin='round'/%3E%3C/svg%3E") 8 2, pointer;
-}
