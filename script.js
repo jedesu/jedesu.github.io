@@ -56,20 +56,32 @@ const LINKS = [
 // The three marked "example" are placeholders to show the thing working —
 // swap in real places and delete the rest.
 const TRIPS = [
-  // japan, the next one — three stops, close enough together that the globe
-  // zooms in when you tap near them so they come apart
-  { id: 'tokyo', place: 'tokyo', when: 'the next one', lat: 35.68, lon: 139.69, upcoming: true, photos: [] },
-  { id: 'kyoto', place: 'kyoto', when: 'the next one', lat: 35.01, lon: 135.77, upcoming: true, photos: [] },
-  { id: 'hokkaido', place: 'hokkaido', when: 'the next one', lat: 43.06, lon: 141.35, upcoming: true, photos: [] },
+  // japan, the next one — four stops close enough together that the globe
+  // leans in when you tap one, so they come apart
+  { id: 'tokyo', place: 'tokyo', region: 'japan', when: 'the next one', lat: 35.68, lon: 139.69, upcoming: true, photos: [] },
+  { id: 'kyoto', place: 'kyoto', region: 'japan', when: 'the next one', lat: 35.01, lon: 135.77, upcoming: true, photos: [] },
+  { id: 'hokkaido', place: 'hokkaido', region: 'japan', when: 'the next one', lat: 43.06, lon: 141.35, upcoming: true, photos: [] },
+  { id: 'okinawa', place: 'okinawa', region: 'japan', when: 'been', lat: 26.21, lon: 127.68, photos: [] },
 
-  { id: 'korea', place: 'korea', when: 'been', lat: 37.57, lon: 126.98, photos: [] },
-  { id: 'thailand', place: 'thailand', when: 'been', lat: 13.76, lon: 100.5, photos: [] },
+  { id: 'bangkok', place: 'bangkok', region: 'thailand', when: 'been', lat: 13.76, lon: 100.5, photos: [] },
+  { id: 'chiangmai', place: 'chiang mai', region: 'thailand', when: 'been', lat: 18.79, lon: 98.98, photos: [] },
+  { id: 'whistler', place: 'whistler', region: 'canada', when: 'been', lat: 50.12, lon: -122.95, photos: [] },
+  { id: 'oahu', place: 'oahu', region: 'hawaii', when: 'been', lat: 21.31, lon: -157.86, photos: [] },
+  { id: 'nyc', place: 'new york', region: 'usa', when: 'been', lat: 40.71, lon: -74.01, photos: [] },
+  { id: 'santiago', place: 'santiago', region: 'chile', when: 'been', lat: -33.45, lon: -70.67, photos: [] },
+
+  // These three were given as whole countries, so they're labelled as such and
+  // pinned at the capital. Give me the city and I'll put the pin on it.
+  { id: 'korea', place: 'south korea', when: 'been', lat: 37.57, lon: 126.98, photos: [] },
   { id: 'nz', place: 'new zealand', when: 'been', lat: -41.29, lon: 174.78, photos: [] },
-  { id: 'whistler', place: 'whistler', when: 'been', lat: 50.12, lon: -122.95, photos: [] },
-  { id: 'nyc', place: 'new york', when: 'been', lat: 40.71, lon: -74.01, photos: [] },
-  { id: 'santiago', place: 'santiago', when: 'been', lat: -33.45, lon: -70.67, photos: [] },
   { id: 'argentina', place: 'argentina', when: 'been', lat: -34.6, lon: -58.38, photos: [] },
 ];
+
+// "tokyo, japan" on the globe; the polaroids stay on the short name so the
+// handwriting doesn't run off the frame
+function tripName(trip) {
+  return trip.region ? trip.place + ', ' + trip.region : trip.place;
+}
 
 let pickedTrip = 0;
 
@@ -656,7 +668,7 @@ function createDome(canvas) {
       return -1;
     }
     const box = domeEl.getBoundingClientRect();
-    tip.textContent = TRIPS[i].place;
+    tip.textContent = tripName(TRIPS[i]);
     tip.style.left = e.clientX - box.left + 'px';
     tip.style.top = e.clientY - box.top + 'px';
     tip.hidden = false;
@@ -831,7 +843,7 @@ function goToTrip(i) {
 function refreshTrip() {
   const trip = TRIPS[pickedTrip];
   const caption = document.querySelector('.dome-caption');
-  if (caption) caption.textContent = trip.place + ' · ' + trip.when;
+  if (caption) caption.textContent = tripName(trip) + ' · ' + trip.when;
 
   items.forEach((entry, id) => {
     if (id.indexOf('tp-') === 0) {
@@ -903,7 +915,7 @@ function render(data) {
     disposeDome();
     dome = createDome(wrap.querySelector('.dome-canvas'));
     const trip = TRIPS[pickedTrip];
-    wrap.querySelector('.dome-caption').textContent = trip.place + ' · ' + trip.when;
+    wrap.querySelector('.dome-caption').textContent = tripName(trip) + ' · ' + trip.when;
     if (dome) dome.face(trip.lat, trip.lon);
     else wrap.querySelector('.dome-glass').classList.add('no-webgl');
   } else {
