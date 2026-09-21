@@ -59,6 +59,52 @@ const LINKS = [
 // is the tilt in degrees, and tape: true swaps the pushpin for a strip of tape.
 const BOARDS = [
   {
+    id: 'about',
+    name: '// hi',
+    note: "who i am, the short version",
+    items: [
+      {
+        id: 'a-me',
+        kind: 'card',
+        lead: true,
+        name: "hi ! i'm julianne :)",
+        role: 'product & project manager',
+        lines: [
+          'i turn ideas into things people actually use — features, workflows, and the small details that make a product feel good.',
+          'previously: an AI support platform. offline: trips, horror movies, books.',
+        ],
+        x: 4,
+        y: 13,
+        rot: -1.5,
+        pin: '#d2601a',
+      },
+      {
+        id: 'a-linkedin',
+        kind: 'card',
+        label: 'linkedin',
+        name: '@julianneedes',
+        lines: ['best way to reach me'],
+        url: 'https://www.linkedin.com/in/julianneedes/',
+        x: 62,
+        y: 12,
+        rot: 2,
+        pin: '#2f6fb0',
+      },
+      {
+        id: 'a-resume',
+        kind: 'card',
+        label: 'resume',
+        name: 'resume.pdf',
+        lines: ['the whole history, properly formatted'],
+        url: 'assets/julianne-edes-resume.pdf',
+        x: 62,
+        y: 55,
+        rot: -2.5,
+        pin: '#b03a3a',
+      },
+    ],
+  },
+  {
     id: 'projects',
     name: '// projects',
     note: "things i'm building",
@@ -304,10 +350,15 @@ function renderGuestList() {
 // ---- sizing ----------------------------------------------------------------
 // Items are sized in pixels but positioned in percentages, so they have to
 // scale with the board or they'd swallow it whole on a small screen.
+const WIDEST_ITEM = 330; // the lead card, and so what has to fit when stacked
+const STACK_GUTTER = 28; // the cork's own side padding in that layout
+
 function fit() {
   const w = board.clientWidth;
   if (!w) return;
-  const scale = isStacked() ? Math.min(1, w / 300) : w / DESIGN_WIDTH;
+  const scale = isStacked()
+    ? Math.min(1, (w - STACK_GUTTER) / WIDEST_ITEM)
+    : w / DESIGN_WIDTH;
   document.documentElement.style.setProperty('--scale', scale.toFixed(4));
 }
 
@@ -330,6 +381,18 @@ function buildPolaroid(data) {
 
   node.appendChild(shot);
   node.appendChild(el('p', 'polaroid-caption', data.caption || ''));
+  return node;
+}
+
+function buildCard(data) {
+  const node = el('div', 'card' + (data.lead ? ' is-lead' : ''));
+
+  if (data.label) node.appendChild(el('p', 'card-label', data.label));
+  if (data.name) node.appendChild(el('h3', 'card-name', data.name));
+  if (data.role) node.appendChild(el('p', 'card-role', data.role));
+  (data.lines || []).forEach((line) => node.appendChild(el('p', 'card-line', line)));
+  if (data.url) node.appendChild(el('p', 'card-open', 'click to open →'));
+
   return node;
 }
 
@@ -360,11 +423,14 @@ function render(data) {
 
   const live = Object.assign({}, data, { x: x, y: y, z: z });
 
-  wrap.appendChild(data.kind === 'polaroid' ? buildPolaroid(data) : buildSticky(data));
+  // on the wrapper, so the card's top edge can pick up the same colour
+  if (data.pin) wrap.style.setProperty('--pin', data.pin);
 
-  const fastener = el('div', data.tape ? 'tape' : 'pin');
-  if (!data.tape) fastener.style.setProperty('--pin', data.pin || '#d2601a');
-  wrap.appendChild(fastener);
+  const build =
+    data.kind === 'polaroid' ? buildPolaroid : data.kind === 'card' ? buildCard : buildSticky;
+  wrap.appendChild(build(data));
+
+  wrap.appendChild(el('div', data.tape ? 'tape' : 'pin'));
 
   if (data.fresh) {
     wrap.classList.add('landing');
@@ -514,7 +580,9 @@ function attach(node, live) {
       store.positions[live.id] = { x: live.x, y: live.y, z: live.z };
       save();
     } else if (zoomedId === live.id) {
-      zoomOut();
+      // a second tap on the zoomed item: follow its link, or put it back
+      if (live.url) window.open(live.url, '_blank', 'noopener');
+      else zoomOut();
     } else {
       zoomIn(live.id);
     }
