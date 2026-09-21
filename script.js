@@ -56,18 +56,19 @@ const LINKS = [
 // The three marked "example" are placeholders to show the thing working —
 // swap in real places and delete the rest.
 const TRIPS = [
-  {
-    id: 'japan',
-    place: 'japan',
-    when: 'the next one',
-    lat: 35.68,
-    lon: 139.69,
-    upcoming: true,
-    photos: [],
-  },
-  { id: 'x1', place: 'lisbon', when: 'example', lat: 38.72, lon: -9.14, photos: [] },
-  { id: 'x2', place: 'reykjavík', when: 'example', lat: 64.15, lon: -21.94, photos: [] },
-  { id: 'x3', place: 'mexico city', when: 'example', lat: 19.43, lon: -99.13, photos: [] },
+  // japan, the next one — three stops, close enough together that the globe
+  // zooms in when you tap near them so they come apart
+  { id: 'tokyo', place: 'tokyo', when: 'the next one', lat: 35.68, lon: 139.69, upcoming: true, photos: [] },
+  { id: 'kyoto', place: 'kyoto', when: 'the next one', lat: 35.01, lon: 135.77, upcoming: true, photos: [] },
+  { id: 'hokkaido', place: 'hokkaido', when: 'the next one', lat: 43.06, lon: 141.35, upcoming: true, photos: [] },
+
+  { id: 'korea', place: 'korea', when: 'been', lat: 37.57, lon: 126.98, photos: [] },
+  { id: 'thailand', place: 'thailand', when: 'been', lat: 13.76, lon: 100.5, photos: [] },
+  { id: 'nz', place: 'new zealand', when: 'been', lat: -41.29, lon: 174.78, photos: [] },
+  { id: 'whistler', place: 'whistler', when: 'been', lat: 50.12, lon: -122.95, photos: [] },
+  { id: 'nyc', place: 'new york', when: 'been', lat: 40.71, lon: -74.01, photos: [] },
+  { id: 'santiago', place: 'santiago', when: 'been', lat: -33.45, lon: -70.67, photos: [] },
+  { id: 'argentina', place: 'argentina', when: 'been', lat: -34.6, lon: -58.38, photos: [] },
 ];
 
 let pickedTrip = 0;
@@ -523,41 +524,59 @@ function createDome(canvas) {
     );
   }
 
-  // one marker per trip: a pin head, a halo, and a fat invisible hit target
+  // how far each trip sits from its closest neighbour, so a cluster of places
+  // a few degrees apart doesn't end up as one unpickable blob
+  const spots = TRIPS.map((t) => toVec(t.lat, t.lon, R * 1.015));
+  const elbowRoom = spots.map((a, i) => {
+    let nearest = Infinity;
+    spots.forEach((b, j) => {
+      if (i !== j) nearest = Math.min(nearest, a.distanceTo(b));
+    });
+    return nearest;
+  });
+
+  // one marker per trip: a pin head, a halo, and an invisible hit target
   const markers = TRIPS.map((trip, i) => {
-    const at = toVec(trip.lat, trip.lon, R * 1.015);
+    const at = spots[i];
     const colour = trip.upcoming ? 0xd2601a : 0xb03a3a;
+    // never more than half way to the neighbour, so hit areas can't swap places
+    const reach = Math.max(0.13, Math.min(0.55, elbowRoom[i] * 0.45));
+    const size = Math.min(0.18, reach * 0.85);
 
     const head = new THREE.Mesh(
-      new THREE.SphereGeometry(0.2, 14, 14),
+      new THREE.SphereGeometry(size, 14, 14),
       new THREE.MeshBasicMaterial({ color: colour })
     );
     head.position.copy(at);
     group.add(head);
 
     const halo = new THREE.Mesh(
-      new THREE.SphereGeometry(0.38, 14, 14),
+      new THREE.SphereGeometry(size * 1.9, 14, 14),
       new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 0.3 })
     );
     halo.position.copy(at);
     group.add(halo);
 
     const hit = new THREE.Mesh(
-      new THREE.SphereGeometry(0.62, 8, 8),
+      new THREE.SphereGeometry(reach, 8, 8),
       new THREE.MeshBasicMaterial({ visible: false })
     );
     hit.position.copy(at);
     hit.userData.index = i;
     group.add(hit);
 
-    return { head, halo, hit, at: at };
+    return { head, halo, hit, at: at, crowded: elbowRoom[i] < 1.2 };
   });
 
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
   const TILT = 1.35; // ~77°, short of the pole so the globe can't roll over
+  const FAR = 14.5; // the resting camera distance
+  const NEAR = 9; // close enough that places a few degrees apart come apart
   const spin = { x: 0.2, y: 0 };
   const target = { x: 0.2, y: 0 };
+  let dolly = FAR;
+  let targetDolly = FAR;
   let drift = true;
   let dragging = false;
   let last = { x: 0, y: 0 };
@@ -610,11 +629,18 @@ function createDome(canvas) {
     dragging = false;
     if (travelled < 6) {
       const i = markerAt(e.clientX, e.clientY);
-      if (i >= 0) pickTrip(i);
+      if (i >= 0) {
+        // lean in for a place with neighbours on top of it, so the next tap
+        // can tell them apart; tapping bare globe pulls back out again
+        targetDolly = markers[i].crowded ? NEAR : FAR;
+        pickTrip(i);
+      } else {
+        targetDolly = FAR;
+      }
     }
     setTimeout(() => {
       drift = true;
-    }, 2200);
+    }, 5000);
   }
 
   canvas.addEventListener('pointerdown', down);
@@ -639,6 +665,9 @@ function createDome(canvas) {
     group.rotation.x = spin.x;
     group.rotation.y = spin.y;
 
+    dolly += (targetDolly - dolly) * 0.08;
+    camera.position.z = dolly;
+
     const now = performance.now();
     markers.forEach((m, i) => {
       const on = i === pickedTrip;
@@ -654,7 +683,8 @@ function createDome(canvas) {
   frame();
 
   // spin the chosen place round to the front
-  function face(lat, lon) {
+  // `close` leans the camera in when the place has neighbours on top of it
+  function face(lat, lon, close) {
     const at = toVec(lat, lon, 1);
     // where it sits now, and where it needs to be to point at the camera
     // rotating the group by `a` moves a point from angle p to p - a, so to land
@@ -666,10 +696,14 @@ function createDome(canvas) {
     while (turn - target.y < -Math.PI) turn += Math.PI * 2;
     target.y = turn;
     target.x = Math.max(-TILT, Math.min(TILT, (lat * Math.PI) / 180));
+    if (close) {
+      const i = TRIPS.findIndex((t) => t.lat === lat && t.lon === lon);
+      targetDolly = i >= 0 && markers[i].crowded ? NEAR : FAR;
+    }
     drift = false;
     setTimeout(() => {
       drift = true;
-    }, 2600);
+    }, 5000);
   }
 
   return {
@@ -697,9 +731,15 @@ function createDome(canvas) {
       settle: function () {
         spin.x = target.x;
         spin.y = target.y;
+        dolly = targetDolly;
         drift = false;
         group.rotation.x = spin.x; // through now, not on the next frame
         group.rotation.y = spin.y;
+        camera.position.z = dolly;
+        camera.updateMatrixWorld(true);
+      },
+      dolly: function () {
+        return { now: dolly, target: targetDolly };
       },
     },
   };
@@ -725,7 +765,7 @@ function pickTrip(i) {
 function goToTrip(i) {
   pickTrip(i);
   const trip = TRIPS[i];
-  if (dome && trip) dome.face(trip.lat, trip.lon);
+  if (dome && trip) dome.face(trip.lat, trip.lon, true);
 }
 
 // swap only the photos, so the globe keeps spinning where it was
