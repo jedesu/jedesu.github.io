@@ -13,27 +13,78 @@
 </head>
 <body>
 
-<div class="room">
+<!-- ===== the boards ===== -->
+<section class="board-section">
+
+  <div class="board-nav">
+    <button type="button" class="board-arrow" id="board-prev" aria-label="previous board">
+      <span aria-hidden="true">←</span>
+    </button>
+
+    <div class="board-title">
+      <h2 class="label" id="board-name">&nbsp;</h2>
+      <p class="board-sub" id="board-note">&nbsp;</p>
+    </div>
+
+    <button type="button" class="board-arrow" id="board-next" aria-label="next board">
+      <span aria-hidden="true">→</span>
+    </button>
+  </div>
 
   <div class="board-frame">
-    <div class="board" id="board" aria-label="julianne's bulletin board">
+    <div class="board" id="board" aria-live="polite">
+      <p class="board-empty" id="board-empty" hidden></p>
       <!-- items are rendered here -->
     </div>
   </div>
 
-  <div class="toolbar">
-    <button type="button" class="tool" id="add-note">
-      <span class="tool-glyph" aria-hidden="true">✎</span> add note
-    </button>
-    <button type="button" class="tool" id="add-photo">
-      <span class="tool-glyph" aria-hidden="true">▣</span> add photo
-    </button>
-    <span class="tool-hint">drag things around &middot; click to look closer</span>
+  <div class="board-foot">
+    <div class="board-dots" id="board-dots" role="tablist" aria-label="pick a board"></div>
+
+    <div class="toolbar" id="toolbar" hidden>
+      <button type="button" class="tool" id="add-note">
+        <span class="tool-glyph" aria-hidden="true">✎</span> add note
+      </button>
+      <button type="button" class="tool" id="add-photo">
+        <span class="tool-glyph" aria-hidden="true">▣</span> add photo
+      </button>
+    </div>
   </div>
 
-</div>
+</section>
 
-<!-- the note composer, shown over the board -->
+<!-- ===== the part a recruiter reads: plain text, no interaction needed ===== -->
+<main class="wrap">
+
+  <header class="intro">
+    <p class="kicker">~/julianne-edes<span class="cursor"></span></p>
+    <h1 class="name">hi ! i'm julianne :)</h1>
+    <p class="role">product &amp; project manager</p>
+  </header>
+
+  <section class="block">
+    <h2 class="label">// about me</h2>
+    <p class="bio">
+      i'm a product &amp; project manager who loves turning ideas into things
+      people actually use. previously i was building an AI support platform,
+      thinking through features, workflows, and all the little details that
+      make a product feel great.
+    </p>
+    <p class="bio">
+      when i'm offline, i'm probably planning my next trip, watching horror
+      movies, or reading. always down to chat about cool ideas, projects, or
+      opportunities!
+    </p>
+  </section>
+
+  <section class="block">
+    <h2 class="label">// more</h2>
+    <ul class="links" id="links"></ul>
+  </section>
+
+</main>
+
+<!-- the note composer, shown over everything -->
 <div class="compose-layer" id="compose-layer" hidden>
   <div class="compose" role="dialog" aria-modal="true" aria-labelledby="compose-title">
     <h2 class="compose-title" id="compose-title">pin a note</h2>

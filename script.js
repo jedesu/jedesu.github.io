@@ -1,132 +1,181 @@
 // ---------------------------------------------------------------------------
-// Julianne's bulletin board.
+// Julianne's site.
 //
-// Everything on the cork is an "item": a paper card, a polaroid, or a sticky
-// note. Julianne's own items are declared below and always start in the same
-// hand-placed spots. Visitors can drag anything, and add notes and photos of
-// their own — those live in the visitor's own browser until a Firebase project
-// is filled into firebase-config.js.
+// The top half is plain readable text. The bottom half is a stack of cork
+// boards you flip between with the arrows — projects, trips, currently, and one
+// visitors can pin to.
+//
+// Everything on a board is an "item": a polaroid or a sticky note. Julianne's
+// items are declared in BOARDS below. Visitors can drag anything and add to the
+// guestbook board; what they add lives in their own browser until a Firebase
+// project is filled into firebase-config.js.
 // ---------------------------------------------------------------------------
 
 const board = document.getElementById('board');
-const STORE_KEY = 'je_board_v1';
+const STORE_KEY = 'je_board_v2';
 const MAX_PHOTOS = 18; // localStorage fills up fast once photos are base64
-const DESIGN_WIDTH = 1144; // the board width the item positions were laid out on
+const DESIGN_WIDTH = 850; // items are drawn for this width, then scaled to the real board
 
-// Under this width the board stops being a pinnable surface and items just
-// stack down it, so there's nothing to drag.
+// Under this width the cork is too small to arrange anything on, so items just
+// stack down it and there's nothing to drag.
 const narrow = window.matchMedia('(max-width: 860px)');
 const isStacked = () => narrow.matches;
 
-// Items are sized in pixels but positioned in percentages, so they have to
-// scale with the board or they'd swallow it whole on a small screen.
-function fit() {
-  const w = board.clientWidth;
-  if (!w) return;
-  const scale = isStacked() ? Math.min(1, w / 300) : w / DESIGN_WIDTH;
-  document.documentElement.style.setProperty('--scale', scale.toFixed(4));
-}
-
-// ---- julianne's items ------------------------------------------------------
-// x / y are percentages of the board, measured from its top-left corner.
-const OWN_ITEMS = [
+// ---- the links that stay in the readable half -----------------------------
+const LINKS = [
   {
-    id: 'intro',
-    kind: 'card',
-    lead: true,
-    x: 2.5,
-    y: 5,
-    rot: -2,
-    pin: '#d2601a',
-    title: "hi ! i'm julianne :)",
-    lines: ['product & project manager'],
+    label: 'linkedin',
+    desc: '@julianneedes',
+    url: 'https://www.linkedin.com/in/julianneedes/',
+    tooltip: 'best way to reach me',
   },
   {
-    id: 'portrait',
-    kind: 'polaroid',
-    ascii: true,
-    x: 30,
-    y: 3,
-    rot: 3.5,
-    tape: true,
-    caption: 'that’s me',
+    label: 'resume',
+    desc: 'view pdf',
+    url: 'assets/julianne-edes-resume.pdf',
+  },
+];
+
+// ---- the boards ------------------------------------------------------------
+//
+// To pin a photo, drop the file in assets/ and add an item like this:
+//
+//   { kind: 'polaroid', src: 'assets/trips/tokyo.jpg', caption: 'tokyo, march',
+//     x: 20, y: 30, rot: -3, tape: true }
+//
+// x and y are percentages of the board measured from its top-left corner, rot
+// is the tilt in degrees, and tape: true swaps the pushpin for a strip of tape.
+const BOARDS = [
+  {
+    id: 'projects',
+    name: '// projects',
+    note: "things i'm building",
+    items: [
+      {
+        id: 'p-adhd',
+        kind: 'sticky',
+        text: 'an adhd productivity app',
+        color: '#bfdbfe',
+        x: 8,
+        y: 14,
+        rot: -3,
+        pin: '#2f6fb0',
+      },
+      {
+        id: 'p-site',
+        kind: 'sticky',
+        text: 'this website',
+        color: '#bbf7d0',
+        x: 38,
+        y: 40,
+        rot: 2.5,
+        pin: '#5f7f3f',
+      },
+      {
+        id: 'p-ai',
+        kind: 'sticky',
+        text: 'an AI support platform',
+        sig: 'previously',
+        color: '#fed7aa',
+        x: 68,
+        y: 12,
+        rot: -1.5,
+        pin: '#d2601a',
+      },
+    ],
+  },
+  {
+    id: 'trips',
+    name: '// trips',
+    note: "places i've been and places i'm going",
+    items: [
+      {
+        id: 't-japan',
+        kind: 'sticky',
+        text: 'japan',
+        sig: 'next one',
+        color: '#fbcfe8',
+        x: 14,
+        y: 26,
+        rot: -2,
+        pin: '#b03a3a',
+      },
+    ],
   },
   {
     id: 'currently',
-    kind: 'card',
-    x: 53,
-    y: 6,
-    rot: -1.5,
-    pin: '#3f7f8c',
-    label: '// currently',
-    rows: [
-      ['working on', 'an adhd productivity app, plus this website'],
-      ['reading', 'the haunting of hill house'],
-      ['watching', 'severance'],
-      ['next trip', 'japan'],
+    name: '// currently',
+    note: "what i'm in the middle of",
+    items: [
+      {
+        id: 'c-reading',
+        kind: 'sticky',
+        text: 'the haunting of hill house',
+        sig: 'reading',
+        color: '#fde68a',
+        x: 11,
+        y: 18,
+        rot: -2.5,
+        pin: '#8c6f3f',
+      },
+      {
+        id: 'c-watching',
+        kind: 'sticky',
+        text: 'severance',
+        sig: 'watching',
+        color: '#bfdbfe',
+        x: 48,
+        y: 32,
+        rot: 3,
+        pin: '#2f6fb0',
+      },
     ],
   },
   {
-    id: 'projects',
-    kind: 'card',
-    x: 76.8,
-    y: 8,
-    rot: 2,
-    pin: '#8c6f3f',
-    label: '// projects',
-    lines: ['coming soon — check back.'],
-  },
-  {
-    id: 'about',
-    kind: 'card',
-    x: 3.5,
-    y: 25,
-    rot: 1.5,
-    pin: '#5f7f3f',
-    label: '// about me',
-    lines: [
-      'i’m a product & project manager who loves turning ideas into things people actually use. previously i was building an AI support platform, thinking through features, workflows, and all the little details that make a product feel great.',
-      'when i’m offline, i’m probably planning my next trip, watching horror movies, or reading.',
-    ],
-  },
-  {
-    id: 'resume',
-    kind: 'card',
-    x: 29.5,
-    y: 47,
-    rot: -2.5,
-    pin: '#b03a3a',
-    label: '// resume',
-    title: 'resume.pdf',
-    lines: ['the whole history, properly formatted.'],
-    url: 'assets/julianne-edes-resume.pdf',
-    hint: 'click to open →',
-  },
-  {
-    id: 'linkedin',
-    kind: 'card',
-    x: 53,
-    y: 50,
-    rot: 1,
-    pin: '#2f6fb0',
-    label: '// linkedin',
-    title: '@julianneedes',
-    lines: ['best way to reach me.'],
-    url: 'https://www.linkedin.com/in/julianneedes/',
-    hint: 'click to open →',
+    id: 'guestbook',
+    name: '// the guestbook',
+    note: 'pin a note or a photo — this one is yours',
+    open: true, // the only board that takes what visitors add
+    empty: 'nothing pinned yet —\nbe the first',
+    items: [],
   },
 ];
 
 const NOTE_COLORS = ['#fde68a', '#fbcfe8', '#bfdbfe', '#bbf7d0', '#fed7aa'];
 
+// ---- the readable half -----------------------------------------------------
+(function renderLinks() {
+  const list = document.getElementById('links');
+  LINKS.forEach((link) => {
+    const li = document.createElement('li');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    if (link.tooltip) btn.title = link.tooltip;
+
+    const arrow = document.createElement('span');
+    arrow.className = 'arrow';
+    arrow.textContent = '→';
+
+    const label = document.createElement('span');
+    label.textContent = link.label;
+
+    const desc = document.createElement('span');
+    desc.className = 'desc';
+    desc.textContent = link.desc;
+
+    btn.append(arrow, label, desc);
+    btn.addEventListener('click', () => window.open(link.url, '_blank', 'noopener'));
+    li.appendChild(btn);
+    list.appendChild(li);
+  });
+})();
+
 // ---- saved state -----------------------------------------------------------
-// Only two things persist: where a visitor dragged each item, and whatever
-// they added themselves.
+// Two things persist: where a visitor dragged each item, and whatever they
+// pinned to the guestbook themselves.
 function loadStore() {
   try {
-    const raw = localStorage.getItem(STORE_KEY);
-    if (!raw) return { positions: {}, guests: [], top: 10 };
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
     return {
       positions: parsed.positions || {},
       guests: Array.isArray(parsed.guests) ? parsed.guests : [],
@@ -144,13 +193,23 @@ function save() {
     localStorage.setItem(STORE_KEY, JSON.stringify(store));
     return true;
   } catch (e) {
-    // quota — almost always a photo that pushed it over
-    return false;
+    return false; // quota — almost always a photo that pushed it over
   }
 }
 
+// ---- sizing ----------------------------------------------------------------
+// Items are sized in pixels but positioned in percentages, so they have to
+// scale with the board or they'd swallow it whole on a small screen.
+function fit() {
+  const w = board.clientWidth;
+  if (!w) return;
+  const scale = isStacked() ? Math.min(1, w / 300) : w / DESIGN_WIDTH;
+  document.documentElement.style.setProperty('--scale', scale.toFixed(4));
+}
+
 // ---- building items --------------------------------------------------------
-const items = new Map(); // id -> { data, el }
+const items = new Map(); // id -> { data, el }, only for the board on screen
+let zoomedId = null;
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);
@@ -159,51 +218,14 @@ function el(tag, cls, text) {
   return node;
 }
 
-function buildCard(data) {
-  const node = el('div', 'card' + (data.lead ? ' is-lead' : ''));
-
-  if (data.label) node.appendChild(el('p', 'card-label', data.label));
-  if (data.title) node.appendChild(el('h2', 'card-title', data.title));
-
-  (data.lines || []).forEach((line, i) => {
-    node.appendChild(el('p', i === 0 && data.title ? 'sub' : '', line));
-  });
-
-  if (data.rows) {
-    const list = el('ul', 'rows');
-    data.rows.forEach(([k, v]) => {
-      const li = el('li');
-      li.appendChild(el('span', 'k', k));
-      li.appendChild(el('span', 'v', v));
-      list.appendChild(li);
-    });
-    node.appendChild(list);
-  }
-
-  if (data.hint) node.appendChild(el('p', 'card-hint', data.hint));
-  return node;
-}
-
 function buildPolaroid(data) {
   const node = el('div', 'polaroid');
   const shot = el('div', 'polaroid-shot');
 
-  if (data.ascii) {
-    const pre = el('pre');
-    pre.setAttribute('aria-label', 'ascii-art portrait of julianne');
-    fetch('assets/portrait.txt')
-      .then((r) => (r.ok ? r.text() : Promise.reject()))
-      .then((t) => {
-        pre.textContent = t.replace(/\s+$/, '');
-      })
-      .catch(() => {
-        pre.textContent = ':)';
-      });
-    shot.appendChild(pre);
-  } else if (data.src) {
+  if (data.src) {
     const img = el('img');
     img.src = data.src;
-    img.alt = data.caption || 'a photo someone pinned to the board';
+    img.alt = data.caption || 'a pinned photo';
     img.draggable = false;
     shot.appendChild(img);
     if (data.fresh) shot.classList.add('developing');
@@ -241,22 +263,11 @@ function render(data) {
 
   const live = Object.assign({}, data, { x: x, y: y, z: z });
 
-  if (data.kind === 'polaroid') {
-    wrap.appendChild(buildPolaroid(data));
-    const fastener = el('div', data.tape ? 'tape' : 'pin');
-    if (!data.tape) fastener.style.setProperty('--pin', data.pin || '#c9c9c9');
-    wrap.appendChild(fastener);
-  } else if (data.kind === 'sticky') {
-    wrap.appendChild(buildSticky(data));
-    const pin = el('div', 'pin');
-    pin.style.setProperty('--pin', data.pin || '#b03a3a');
-    wrap.appendChild(pin);
-  } else {
-    wrap.appendChild(buildCard(data));
-    const pin = el('div', 'pin');
-    pin.style.setProperty('--pin', data.pin || '#d2601a');
-    wrap.appendChild(pin);
-  }
+  wrap.appendChild(data.kind === 'polaroid' ? buildPolaroid(data) : buildSticky(data));
+
+  const fastener = el('div', data.tape ? 'tape' : 'pin');
+  if (!data.tape) fastener.style.setProperty('--pin', data.pin || '#d2601a');
+  wrap.appendChild(fastener);
 
   if (data.fresh) {
     wrap.classList.add('landing');
@@ -269,9 +280,83 @@ function render(data) {
   return wrap;
 }
 
-// ---- dragging --------------------------------------------------------------
-let zoomedId = null;
+// ---- flipping between boards ----------------------------------------------
+const boardName = document.getElementById('board-name');
+const boardNote = document.getElementById('board-note');
+const boardEmpty = document.getElementById('board-empty');
+const boardDots = document.getElementById('board-dots');
+const toolbar = document.getElementById('toolbar');
+let current = 0;
 
+function currentBoard() {
+  return BOARDS[current];
+}
+
+function itemsFor(b) {
+  // the guestbook also carries whatever this visitor pinned
+  return b.open ? b.items.concat(store.guests) : b.items;
+}
+
+function paint() {
+  const b = currentBoard();
+
+  items.forEach((entry) => entry.el.remove());
+  items.clear();
+
+  boardName.textContent = b.name;
+  boardNote.textContent = b.note;
+  toolbar.hidden = !b.open;
+
+  const list = itemsFor(b);
+  list.forEach((data) => render(Object.assign({}, data, { fresh: false })));
+
+  boardEmpty.textContent = b.empty || 'nothing here yet';
+  boardEmpty.hidden = list.length > 0;
+
+  Array.prototype.forEach.call(boardDots.children, (dot, i) => {
+    dot.setAttribute('aria-selected', i === current ? 'true' : 'false');
+    dot.tabIndex = i === current ? 0 : -1;
+  });
+}
+
+function go(index, direction) {
+  const next = (index + BOARDS.length) % BOARDS.length;
+  if (next === current) return;
+  if (zoomedId) zoomOut();
+
+  const out = direction < 0 ? 'slide-out-right' : 'slide-out-left';
+  const back = direction < 0 ? 'slide-in-left' : 'slide-in-right';
+
+  board.classList.add(out);
+  setTimeout(() => {
+    current = next;
+    paint();
+    board.classList.remove(out);
+    board.classList.add(back);
+    setTimeout(() => board.classList.remove(back), 260);
+  }, 170);
+}
+
+BOARDS.forEach((b, i) => {
+  const dot = el('button', 'board-dot');
+  dot.type = 'button';
+  dot.setAttribute('role', 'tab');
+  dot.setAttribute('aria-label', b.name.replace('// ', ''));
+  dot.addEventListener('click', () => go(i, i > current ? 1 : -1));
+  boardDots.appendChild(dot);
+});
+
+document.getElementById('board-prev').addEventListener('click', () => go(current - 1, -1));
+document.getElementById('board-next').addEventListener('click', () => go(current + 1, 1));
+
+window.addEventListener('keydown', (e) => {
+  if (zoomedId || !document.getElementById('compose-layer').hidden) return;
+  if (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+  if (e.key === 'ArrowLeft') go(current - 1, -1);
+  if (e.key === 'ArrowRight') go(current + 1, 1);
+});
+
+// ---- dragging --------------------------------------------------------------
 function bringToFront(live, node) {
   store.top = (store.top || 10) + 1;
   live.z = store.top;
@@ -335,9 +420,7 @@ function attach(node, live) {
       store.positions[live.id] = { x: live.x, y: live.y, z: live.z };
       save();
     } else if (zoomedId === live.id) {
-      // a second tap on the zoomed item: follow its link, or put it back
-      if (live.url) window.open(live.url, '_blank', 'noopener');
-      else zoomOut();
+      zoomOut();
     } else {
       zoomIn(live.id);
     }
@@ -415,20 +498,6 @@ window.addEventListener('keydown', (e) => {
 });
 
 // ---- finding somewhere to put a new item -----------------------------------
-function currentBoxes() {
-  const rect = board.getBoundingClientRect();
-  const out = [];
-  items.forEach((entry) => {
-    out.push({
-      x: entry.data.x,
-      y: entry.data.y,
-      w: (entry.el.offsetWidth / rect.width) * 100,
-      h: (entry.el.offsetHeight / rect.height) * 100,
-    });
-  });
-  return out;
-}
-
 function overlapArea(a, b) {
   const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
   const oy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
@@ -436,7 +505,17 @@ function overlapArea(a, b) {
 }
 
 function findSpot(w, h) {
-  const boxes = currentBoxes();
+  const rect = board.getBoundingClientRect();
+  const boxes = [];
+  items.forEach((entry) => {
+    boxes.push({
+      x: entry.data.x,
+      y: entry.data.y,
+      w: (entry.el.offsetWidth / rect.width) * 100,
+      h: (entry.el.offsetHeight / rect.height) * 100,
+    });
+  });
+
   let best = null;
   let bestScore = Infinity;
 
@@ -473,11 +552,17 @@ function dropOldestPhoto() {
 }
 
 function addGuestItem(data) {
-  // render it first so we can measure the real thing, then place it
-  const staged = Object.assign({}, data, { x: 50, y: 50, fresh: true });
-  const node = render(staged);
-  const rect = board.getBoundingClientRect();
+  // the guestbook is the only board that takes these
+  const guestbook = BOARDS.findIndex((b) => b.open);
+  if (current !== guestbook) {
+    go(guestbook, guestbook > current ? 1 : -1);
+    setTimeout(() => addGuestItem(data), 460);
+    return;
+  }
 
+  // render it first so we can measure the real thing, then place it
+  const node = render(Object.assign({}, data, { x: 50, y: 50, fresh: true }));
+  const rect = board.getBoundingClientRect();
   const live = items.get(data.id).data;
   const spot = findSpot(
     (node.offsetWidth / rect.width) * 100,
@@ -489,15 +574,13 @@ function addGuestItem(data) {
   node.style.left = spot.x + '%';
   node.style.top = spot.y + '%';
   bringToFront(live, node);
+  boardEmpty.hidden = true;
 
-  const record = Object.assign({}, data, { x: spot.x, y: spot.y });
-  delete record.fresh;
-  store.guests.push(record);
+  store.guests.push(Object.assign({}, data, { x: spot.x, y: spot.y }));
   store.positions[data.id] = { x: spot.x, y: spot.y, z: live.z };
 
   // over quota: shed the oldest photo and try once more
   if (!save() && dropOldestPhoto()) save();
-  return node;
 }
 
 function newId() {
@@ -529,14 +612,6 @@ NOTE_COLORS.forEach((color) => {
   swatches.appendChild(b);
 });
 
-function openCompose() {
-  composeText.value = '';
-  composeLeft.textContent = '180';
-  composePin.disabled = true;
-  composeLayer.hidden = false;
-  composeText.focus();
-}
-
 function closeCompose() {
   composeLayer.hidden = true;
 }
@@ -567,7 +642,14 @@ composeLayer.addEventListener('click', (e) => {
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !composeLayer.hidden) closeCompose();
 });
-document.getElementById('add-note').addEventListener('click', openCompose);
+
+document.getElementById('add-note').addEventListener('click', () => {
+  composeText.value = '';
+  composeLeft.textContent = '180';
+  composePin.disabled = true;
+  composeLayer.hidden = false;
+  composeText.focus();
+});
 
 // ---- photos ----------------------------------------------------------------
 const fileInput = document.getElementById('file-input');
@@ -601,8 +683,7 @@ function downscale(file, max) {
 fileInput.addEventListener('change', async () => {
   const file = fileInput.files && fileInput.files[0];
   fileInput.value = '';
-  if (!file || !file.type.indexOf) return;
-  if (file.type.indexOf('image/') !== 0) return;
+  if (!file || file.type.indexOf('image/') !== 0) return;
 
   const photos = store.guests.filter((g) => g.kind === 'polaroid').length;
   if (photos >= MAX_PHOTOS) dropOldestPhoto();
@@ -629,6 +710,4 @@ fileInput.addEventListener('change', async () => {
 fit();
 window.addEventListener('resize', fit);
 if (narrow.addEventListener) narrow.addEventListener('change', fit);
-
-OWN_ITEMS.forEach(render);
-store.guests.forEach((g) => render(Object.assign({}, g, { fresh: false })));
+paint();
