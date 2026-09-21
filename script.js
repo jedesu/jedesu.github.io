@@ -48,6 +48,73 @@ const LINKS = [
   },
 ];
 
+// ---- trips -----------------------------------------------------------------
+// Each one is a marker on the dome. Drop photos into assets/trips/ and list
+// them here; clicking the marker pins that trip's photos up beside the globe.
+// A trip with no photos yet shows empty frames with its name on them.
+//
+// The three marked "example" are placeholders to show the thing working —
+// swap in real places and delete the rest.
+const TRIPS = [
+  {
+    id: 'japan',
+    place: 'japan',
+    when: 'the next one',
+    lat: 35.68,
+    lon: 139.69,
+    upcoming: true,
+    photos: [],
+  },
+  { id: 'x1', place: 'lisbon', when: 'example', lat: 38.72, lon: -9.14, photos: [] },
+  { id: 'x2', place: 'reykjavík', when: 'example', lat: 64.15, lon: -21.94, photos: [] },
+  { id: 'x3', place: 'mexico city', when: 'example', lat: 19.43, lon: -99.13, photos: [] },
+];
+
+let pickedTrip = 0;
+
+// The globe sits on the left; whichever trip is picked hangs to the right of it.
+function tripItems() {
+  const trip = TRIPS[pickedTrip] || TRIPS[0];
+  const items = [
+    {
+      id: 'trip-globe',
+      kind: 'globe',
+      fixed: true, // it's a fixture on this board, not something to drag about
+      x: 3,
+      y: 9,
+      rot: 0,
+    },
+  ];
+
+  // three small frames fit the cork beside the globe; a fourth photo wouldn't,
+  // so only the first three are pinned up
+  const SPOTS = [
+    { x: 46, y: 4, rot: -3 },
+    { x: 69, y: 4, rot: 2.5 },
+    { x: 57, y: 52, rot: -1.5 },
+  ];
+
+  const shots = trip.photos.length ? trip.photos : [null, null];
+  shots.slice(0, SPOTS.length).forEach((src, i) => {
+    items.push({
+      id: 'tp-' + trip.id + '-' + i,
+      kind: 'polaroid',
+      small: true,
+      src: src,
+      caption: src ? trip.place : trip.place + ' ?',
+      empty: !src,
+      x: SPOTS[i].x,
+      y: SPOTS[i].y,
+      rot: SPOTS[i].rot,
+      tape: i % 2 === 0,
+      pin: '#b03a3a',
+      fresh: true,
+    });
+  });
+
+  return items;
+}
+
 // ---- the boards ------------------------------------------------------------
 //
 // To pin a photo, drop the file in assets/ and add an item like this:
@@ -151,20 +218,9 @@ const BOARDS = [
   {
     id: 'trips',
     name: '// trips',
-    note: "places i've been and places i'm going",
-    items: [
-      {
-        id: 't-japan',
-        kind: 'sticky',
-        text: 'japan',
-        sig: 'next one',
-        color: '#fbcfe8',
-        x: 14,
-        y: 26,
-        rot: -2,
-        pin: '#b03a3a',
-      },
-    ],
+    note: 'spin the globe, tap a place',
+    dynamic: tripItems,
+    items: [],
   },
   {
     id: 'currently',
@@ -362,6 +418,7 @@ const STACK_GUTTER = 28; // the cork's own side padding in that layout
 function fit() {
   const w = board.clientWidth;
   if (!w) return;
+  if (dome) dome.resize();
   const scale = isStacked()
     ? Math.min(1, (w - STACK_GUTTER) / WIDEST_ITEM)
     : w / DESIGN_WIDTH;
@@ -373,7 +430,7 @@ const items = new Map(); // id -> { data, el }, only for the board on screen
 let zoomedId = null;
 
 function buildPolaroid(data) {
-  const node = el('div', 'polaroid');
+  const node = el('div', 'polaroid' + (data.small ? ' is-small' : ''));
   const shot = el('div', 'polaroid-shot');
 
   if (data.src) {
@@ -383,6 +440,9 @@ function buildPolaroid(data) {
     img.draggable = false;
     shot.appendChild(img);
     if (data.fresh) shot.classList.add('developing');
+  } else if (data.empty) {
+    shot.classList.add('is-empty');
+    shot.appendChild(el('span', 'shot-hint', 'no photo yet'));
   }
 
   node.appendChild(shot);
@@ -416,6 +476,276 @@ function buildCard(data) {
   return node;
 }
 
+// ---- the dome on the trips board -------------------------------------------
+// A globe under glass, pinned to the cork. Drag it to spin, tap a marker to
+// pull up that trip. It owns its own pointer handling, which is why the item
+// is marked fixed and never gets the drag-and-zoom treatment.
+let dome = null;
+
+function disposeDome() {
+  if (!dome) return;
+  dome.stop();
+  dome = null;
+}
+
+function createDome(canvas) {
+  if (!window.THREE) return null;
+
+  const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
+  camera.position.z = 14.5;
+
+  const R = 5;
+  const group = new THREE.Group();
+  scene.add(group);
+
+  const earth = new THREE.Mesh(
+    new THREE.SphereGeometry(R, 48, 48),
+    new THREE.MeshLambertMaterial({ map: new THREE.TextureLoader().load('assets/earth-cartoon.png') })
+  );
+  group.add(earth);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.86));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.46);
+  sun.position.set(3, 2, 4);
+  scene.add(sun);
+
+  function toVec(lat, lon, radius) {
+    const phi = (lat * Math.PI) / 180;
+    const theta = ((lon - 180) * Math.PI) / 180;
+    return new THREE.Vector3(
+      -radius * Math.cos(phi) * Math.cos(theta),
+      radius * Math.sin(phi),
+      radius * Math.cos(phi) * Math.sin(theta)
+    );
+  }
+
+  // one marker per trip: a pin head, a halo, and a fat invisible hit target
+  const markers = TRIPS.map((trip, i) => {
+    const at = toVec(trip.lat, trip.lon, R * 1.015);
+    const colour = trip.upcoming ? 0xd2601a : 0xb03a3a;
+
+    const head = new THREE.Mesh(
+      new THREE.SphereGeometry(0.2, 14, 14),
+      new THREE.MeshBasicMaterial({ color: colour })
+    );
+    head.position.copy(at);
+    group.add(head);
+
+    const halo = new THREE.Mesh(
+      new THREE.SphereGeometry(0.38, 14, 14),
+      new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 0.3 })
+    );
+    halo.position.copy(at);
+    group.add(halo);
+
+    const hit = new THREE.Mesh(
+      new THREE.SphereGeometry(0.62, 8, 8),
+      new THREE.MeshBasicMaterial({ visible: false })
+    );
+    hit.position.copy(at);
+    hit.userData.index = i;
+    group.add(hit);
+
+    return { head, halo, hit, at: at };
+  });
+
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
+  const TILT = 1.35; // ~77°, short of the pole so the globe can't roll over
+  const spin = { x: 0.2, y: 0 };
+  const target = { x: 0.2, y: 0 };
+  let drift = true;
+  let dragging = false;
+  let last = { x: 0, y: 0 };
+  let travelled = 0;
+  let pointerId = null;
+
+  function markerAt(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    pointer.set(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1
+    );
+    raycaster.setFromCamera(pointer, camera);
+    const globeHit = raycaster.intersectObject(earth, false)[0];
+    const hits = raycaster.intersectObjects(markers.map((m) => m.hit), false);
+    for (const h of hits) {
+      // skip anything round the back of the planet
+      if (!globeHit || h.distance <= globeHit.distance + 0.1) return h.object.userData.index;
+    }
+    return -1;
+  }
+
+  function down(e) {
+    pointerId = e.pointerId;
+    try {
+      canvas.setPointerCapture(pointerId);
+    } catch (err) {}
+    dragging = true;
+    drift = false;
+    travelled = 0;
+    last = { x: e.clientX, y: e.clientY };
+  }
+
+  function move(e) {
+    if (e.pointerId !== pointerId) {
+      canvas.style.cursor = markerAt(e.clientX, e.clientY) >= 0 ? 'pointer' : 'grab';
+      return;
+    }
+    if (!dragging) return;
+    travelled += Math.abs(e.clientX - last.x) + Math.abs(e.clientY - last.y);
+    target.y += (e.clientX - last.x) * 0.006;
+    target.x += (e.clientY - last.y) * 0.006;
+    target.x = Math.max(-TILT, Math.min(TILT, target.x));
+    last = { x: e.clientX, y: e.clientY };
+  }
+
+  function up(e) {
+    if (e.pointerId !== pointerId) return;
+    pointerId = null;
+    dragging = false;
+    if (travelled < 6) {
+      const i = markerAt(e.clientX, e.clientY);
+      if (i >= 0) pickTrip(i);
+    }
+    setTimeout(() => {
+      drift = true;
+    }, 2200);
+  }
+
+  canvas.addEventListener('pointerdown', down);
+  canvas.addEventListener('pointermove', move);
+  canvas.addEventListener('pointerup', up);
+  canvas.addEventListener('pointercancel', up);
+
+  let running = true;
+
+  function size() {
+    const w = canvas.clientWidth;
+    if (!w) return;
+    renderer.setSize(w, w, false);
+  }
+
+  function frame() {
+    if (!running) return;
+    requestAnimationFrame(frame);
+    if (drift) target.y += 0.0016;
+    spin.x += (target.x - spin.x) * 0.09;
+    spin.y += (target.y - spin.y) * 0.09;
+    group.rotation.x = spin.x;
+    group.rotation.y = spin.y;
+
+    const now = performance.now();
+    markers.forEach((m, i) => {
+      const on = i === pickedTrip;
+      m.head.scale.setScalar(on ? 1.5 : 1);
+      m.halo.scale.setScalar((on ? 1.5 : 1) * (1 + 0.3 * Math.sin(now / 420 + i)));
+      m.halo.material.opacity = on ? 0.45 : 0.22;
+    });
+
+    renderer.render(scene, camera);
+  }
+
+  size();
+  frame();
+
+  // spin the chosen place round to the front
+  function face(lat, lon) {
+    const at = toVec(lat, lon, 1);
+    // where it sits now, and where it needs to be to point at the camera
+    // rotating the group by `a` moves a point from angle p to p - a, so to land
+    // this one on +z (facing the camera) we turn by its angle minus a quarter
+    const here = Math.atan2(at.z, at.x);
+    let turn = here - Math.PI / 2;
+    // take the short way round from wherever the globe currently is
+    while (turn - target.y > Math.PI) turn -= Math.PI * 2;
+    while (turn - target.y < -Math.PI) turn += Math.PI * 2;
+    target.y = turn;
+    target.x = Math.max(-TILT, Math.min(TILT, (lat * Math.PI) / 180));
+    drift = false;
+    setTimeout(() => {
+      drift = true;
+    }, 2600);
+  }
+
+  return {
+    resize: size,
+    face: face,
+    stop: function () {
+      running = false;
+      renderer.dispose();
+    },
+
+    // For checking marker placement from the console, e.g. after editing TRIPS:
+    //   dome.debug.face(t.lat, t.lon); dome.debug.settle(); dome.debug.screenOf(i)
+    // should put that marker in the middle of the canvas.
+    debug: {
+      probe: markerAt, // which marker is under a screen point, or -1
+      screenOf: function (i) {
+        const m = markers[i];
+        if (!m) return null;
+        group.updateMatrixWorld(true);
+        const v = m.at.clone().applyMatrix4(group.matrixWorld).project(camera);
+        const w = canvas.clientWidth;
+        return { x: (v.x * 0.5 + 0.5) * w, y: (-v.y * 0.5 + 0.5) * w, front: v.z < 1 };
+      },
+      face: face,
+      settle: function () {
+        spin.x = target.x;
+        spin.y = target.y;
+        drift = false;
+        group.rotation.x = spin.x; // through now, not on the next frame
+        group.rotation.y = spin.y;
+      },
+    },
+  };
+}
+
+function buildGlobe() {
+  const node = el('div', 'dome');
+  const glass = el('div', 'dome-glass');
+  const canvas = el('canvas', 'dome-canvas');
+  glass.appendChild(canvas);
+  node.appendChild(glass);
+  node.appendChild(el('p', 'dome-caption', ''));
+  return node;
+}
+
+function pickTrip(i) {
+  if (i === pickedTrip) return;
+  pickedTrip = i;
+  refreshTrip();
+}
+
+// picking from anywhere turns the globe to match
+function goToTrip(i) {
+  pickTrip(i);
+  const trip = TRIPS[i];
+  if (dome && trip) dome.face(trip.lat, trip.lon);
+}
+
+// swap only the photos, so the globe keeps spinning where it was
+function refreshTrip() {
+  const trip = TRIPS[pickedTrip];
+  const caption = document.querySelector('.dome-caption');
+  if (caption) caption.textContent = trip.place + ' · ' + trip.when;
+
+  items.forEach((entry, id) => {
+    if (id.indexOf('tp-') === 0) {
+      entry.el.remove();
+      items.delete(id);
+    }
+  });
+
+  tripItems()
+    .filter((d) => d.kind === 'polaroid')
+    .forEach((d) => render(d));
+}
+
 function buildSticky(data) {
   const node = el('div', 'sticky');
   node.style.setProperty('--note', data.color || NOTE_COLORS[0]);
@@ -447,10 +777,16 @@ function render(data) {
   if (data.pin) wrap.style.setProperty('--pin', data.pin);
 
   const build =
-    data.kind === 'polaroid' ? buildPolaroid : data.kind === 'card' ? buildCard : buildSticky;
+    data.kind === 'globe'
+      ? buildGlobe
+      : data.kind === 'polaroid'
+      ? buildPolaroid
+      : data.kind === 'card'
+      ? buildCard
+      : buildSticky;
   wrap.appendChild(build(data));
 
-  wrap.appendChild(el('div', data.tape ? 'tape' : 'pin'));
+  if (data.kind !== 'globe') wrap.appendChild(el('div', data.tape ? 'tape' : 'pin'));
 
   if (data.fresh) {
     wrap.classList.add('landing');
@@ -459,7 +795,22 @@ function render(data) {
 
   board.appendChild(wrap);
   items.set(data.id, { data: live, el: wrap });
-  attach(wrap, live);
+
+  if (data.kind === 'globe') {
+    // the dome answers its own pointers: spin and marker picking, no dragging
+    wrap.classList.add('is-fixed');
+    wrap.removeAttribute('tabindex');
+    wrap.removeAttribute('role');
+    disposeDome();
+    dome = createDome(wrap.querySelector('.dome-canvas'));
+    const trip = TRIPS[pickedTrip];
+    wrap.querySelector('.dome-caption').textContent = trip.place + ' · ' + trip.when;
+    if (dome) dome.face(trip.lat, trip.lon);
+    else wrap.querySelector('.dome-glass').classList.add('no-webgl');
+  } else {
+    attach(wrap, live);
+  }
+
   return wrap;
 }
 
@@ -472,6 +823,7 @@ const toolbar = document.getElementById('toolbar');
 let current = 0;
 
 function itemsFor(b) {
+  if (b.dynamic) return b.dynamic();
   // the guestbook also carries whatever this visitor pinned
   return b.open ? b.items.concat(store.guests) : b.items;
 }
@@ -479,6 +831,7 @@ function itemsFor(b) {
 function paint() {
   const b = BOARDS[current];
 
+  disposeDome();
   items.forEach((entry) => entry.el.remove());
   items.clear();
 
