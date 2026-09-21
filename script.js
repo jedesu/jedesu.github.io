@@ -73,6 +73,10 @@ const BOARDS = [
           'i turn ideas into things people actually use — features, workflows, and the small details that make a product feel good.',
           'previously: an AI support platform. offline: trips, horror movies, books.',
         ],
+        links: [
+          { label: 'linkedin', url: 'https://www.linkedin.com/in/julianneedes/' },
+          { label: 'resume (pdf)', url: 'assets/julianne-edes-resume.pdf' },
+        ],
         x: 4,
         y: 13,
         rot: -1.5,
@@ -84,7 +88,9 @@ const BOARDS = [
         label: 'linkedin',
         name: '@julianneedes',
         lines: ['best way to reach me'],
-        url: 'https://www.linkedin.com/in/julianneedes/',
+        links: [
+          { label: 'open linkedin', url: 'https://www.linkedin.com/in/julianneedes/' },
+        ],
         x: 62,
         y: 12,
         rot: 2,
@@ -96,7 +102,7 @@ const BOARDS = [
         label: 'resume',
         name: 'resume.pdf',
         lines: ['the whole history, properly formatted'],
-        url: 'assets/julianne-edes-resume.pdf',
+        links: [{ label: 'open the pdf', url: 'assets/julianne-edes-resume.pdf' }],
         x: 62,
         y: 55,
         rot: -2.5,
@@ -391,7 +397,21 @@ function buildCard(data) {
   if (data.name) node.appendChild(el('h3', 'card-name', data.name));
   if (data.role) node.appendChild(el('p', 'card-role', data.role));
   (data.lines || []).forEach((line) => node.appendChild(el('p', 'card-line', line)));
-  if (data.url) node.appendChild(el('p', 'card-open', 'click to open →'));
+
+  if (data.links && data.links.length) {
+    const box = el('div', 'card-links');
+    data.links.forEach((link) => {
+      const a = el('a', 'card-link');
+      a.href = link.url;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.appendChild(el('span', '', link.label));
+      a.appendChild(el('span', 'card-link-arrow', '→'));
+      box.appendChild(a);
+    });
+    node.appendChild(box);
+    node.appendChild(el('p', 'card-open', 'open me'));
+  }
 
   return node;
 }
@@ -534,6 +554,8 @@ function attach(node, live) {
   node.addEventListener('pointerdown', (e) => {
     // while something is zoomed, only that item still answers
     if (zoomedId && zoomedId !== live.id) return;
+    // ...and a link inside the open card belongs to the link, not to us
+    if (zoomedId === live.id && e.target.closest('a')) return;
     if (e.button && e.button !== 0) return;
     pointerId = e.pointerId;
     // capture can refuse a pointer that's already gone; the drag still works
@@ -580,9 +602,7 @@ function attach(node, live) {
       store.positions[live.id] = { x: live.x, y: live.y, z: live.z };
       save();
     } else if (zoomedId === live.id) {
-      // a second tap on the zoomed item: follow its link, or put it back
-      if (live.url) window.open(live.url, '_blank', 'noopener');
-      else zoomOut();
+      zoomOut();
     } else {
       zoomIn(live.id);
     }
@@ -620,6 +640,7 @@ function zoomIn(id) {
   const dy = window.innerHeight / 2 - (rect.top + rect.height / 2);
 
   zoomedId = id;
+  board.classList.add('has-zoom');
   node.classList.remove('returning');
   node.classList.add('zoomed');
   node.style.transform = 'translate(' + dx + 'px, ' + dy + 'px) scale(' + scale + ') rotate(0deg)';
@@ -641,7 +662,11 @@ function zoomOut() {
     node.classList.remove('zoomed');
     node.classList.add('returning');
     node.style.transform = '';
-    setTimeout(() => node.classList.remove('returning'), 460);
+    setTimeout(() => {
+      node.classList.remove('returning');
+      // only re-clip once it's all the way home
+      if (!zoomedId) board.classList.remove('has-zoom');
+    }, 460);
   }
 
   backdrop.classList.remove('on');
