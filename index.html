@@ -11,10 +11,17 @@
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="view-board">
 
-<!-- ===== the boards ===== -->
-<section class="board-section">
+<header class="topbar">
+  <div class="view-switch" id="view-switch" role="group" aria-label="choose a view">
+    <button type="button" data-view="board">bulletin</button>
+    <button type="button" data-view="classic">classic</button>
+  </div>
+</header>
+
+<!-- ===== the boards: bulletin view only ===== -->
+<section class="board-section" data-only="board">
 
   <div class="board-nav">
     <button type="button" class="board-arrow" id="board-prev" aria-label="previous board">
@@ -42,10 +49,10 @@
     <div class="board-dots" id="board-dots" role="tablist" aria-label="pick a board"></div>
 
     <div class="toolbar" id="toolbar" hidden>
-      <button type="button" class="tool" id="add-note">
+      <button type="button" class="tool" data-add="note">
         <span class="tool-glyph" aria-hidden="true">✎</span> add note
       </button>
-      <button type="button" class="tool" id="add-photo">
+      <button type="button" class="tool" data-add="photo">
         <span class="tool-glyph" aria-hidden="true">▣</span> add photo
       </button>
     </div>
@@ -53,7 +60,7 @@
 
 </section>
 
-<!-- ===== the part a recruiter reads: plain text, no interaction needed ===== -->
+<!-- ===== the written half: shown in both views ===== -->
 <main class="wrap">
 
   <header class="intro">
@@ -80,6 +87,47 @@
   <section class="block">
     <h2 class="label">// more</h2>
     <ul class="links" id="links"></ul>
+    <p class="note" id="note" hidden></p>
+
+    <div class="now-panel" id="now-panel" hidden>
+      <ul class="now-list">
+        <li>
+          <span class="now-key">working on</span>
+          <span class="now-val">an adhd productivity app, plus this website</span>
+        </li>
+        <li>
+          <span class="now-key">reading</span>
+          <span class="now-val">the haunting of hill house</span>
+        </li>
+        <li>
+          <span class="now-key">watching</span>
+          <span class="now-val">severance</span>
+        </li>
+        <li>
+          <span class="now-key">next trip</span>
+          <span class="now-val">japan</span>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ===== guestbook: classic view only ===== -->
+  <section class="block" data-only="classic">
+    <h2 class="label">// guestbook</h2>
+    <p class="meta">leave a note or a photo — the same pile that lives on the board</p>
+
+    <div class="toolbar toolbar-inline">
+      <button type="button" class="tool" data-add="note">
+        <span class="tool-glyph" aria-hidden="true">✎</span> add note
+      </button>
+      <button type="button" class="tool" data-add="photo">
+        <span class="tool-glyph" aria-hidden="true">▣</span> add photo
+      </button>
+    </div>
+
+    <ul class="guest-list" id="guest-list">
+      <li class="guest-empty" id="guest-empty">no entries yet — be the first to sign</li>
+    </ul>
   </section>
 
 </main>

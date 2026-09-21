@@ -149,7 +149,7 @@ body {
 .board-section {
   max-width: 1180px;
   margin: 0 auto;
-  padding: 56px 32px 0;
+  padding: 8px 32px 0;
 }
 
 /* ---- arrows and the board's name ---- */
@@ -731,13 +731,121 @@ body {
   cursor: not-allowed;
 }
 
+/* ===================================================================
+   the view switch
+   =================================================================== */
+
+.topbar {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 26px 32px 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.view-switch {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #f4f3ef;
+}
+
+.view-switch button {
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-radius: 5px;
+  padding: 7px 15px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.view-switch button:hover {
+  color: var(--text);
+}
+
+.view-switch button[aria-pressed='true'] {
+  color: var(--text);
+  background: var(--bg);
+  box-shadow: 0 1px 2px rgba(60, 40, 20, 0.14);
+}
+
+/* only one view's pieces are on the page at a time */
+.view-board [data-only='classic'],
+.view-classic [data-only='board'] {
+  display: none;
+}
+
+/* ===================================================================
+   the written guestbook (classic view)
+   =================================================================== */
+
+.meta {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin-bottom: 16px;
+}
+
+.toolbar-inline {
+  margin-bottom: 20px;
+}
+
+.guest-list {
+  list-style: none;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.guest-empty {
+  color: var(--faint);
+  font-size: 12.5px;
+}
+
+.guest-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.guest-swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  box-shadow: 0 1px 2px rgba(60, 40, 20, 0.2);
+}
+
+.guest-thumb {
+  width: 38px;
+  height: 38px;
+  object-fit: cover;
+  border-radius: 2px;
+  flex-shrink: 0;
+  background: #2b2b2e;
+  box-shadow: 0 1px 3px rgba(60, 40, 20, 0.22);
+}
+
+.guest-text {
+  min-width: 0;
+  word-break: break-word;
+  color: var(--text);
+}
+
 /* ---- responsive ---- */
 /* Below this width the cork is too small to arrange anything on, so items
    stack down it and dragging is switched off. */
 @media (max-width: 860px) {
+  .topbar { padding: 18px 24px 0; }
+
   .wrap { padding: 56px 24px 80px; }
 
-  .board-section { padding: 40px 24px 0; }
+  .board-section { padding: 4px 24px 0; }
 
   .board-frame {
     width: min(560px, 100%);

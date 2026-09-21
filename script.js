@@ -1,18 +1,17 @@
 // ---------------------------------------------------------------------------
-// Julianne's site.
+// Julianne's site, in two views you switch between at the top:
 //
-// The top half is plain readable text. The bottom half is a stack of cork
-// boards you flip between with the arrows — projects, trips, currently, and one
-// visitors can pin to.
+//   bulletin — a stack of cork boards you flip through with the arrows
+//   classic  — the plain column: about, links, and a written guestbook
 //
-// Everything on a board is an "item": a polaroid or a sticky note. Julianne's
-// items are declared in BOARDS below. Visitors can drag anything and add to the
-// guestbook board; what they add lives in their own browser until a Firebase
-// project is filled into firebase-config.js.
+// Both views share one pile of visitor entries, so a note pinned to the board
+// also shows up in the classic guestbook list. That pile lives in the visitor's
+// own browser until a Firebase project is filled into firebase-config.js.
 // ---------------------------------------------------------------------------
 
 const board = document.getElementById('board');
 const STORE_KEY = 'je_board_v2';
+const VIEW_KEY = 'je_view';
 const MAX_PHOTOS = 18; // localStorage fills up fast once photos are base64
 const DESIGN_WIDTH = 850; // items are drawn for this width, then scaled to the real board
 
@@ -21,7 +20,8 @@ const DESIGN_WIDTH = 850; // items are drawn for this width, then scaled to the 
 const narrow = window.matchMedia('(max-width: 860px)');
 const isStacked = () => narrow.matches;
 
-// ---- the links that stay in the readable half -----------------------------
+// ---- links -----------------------------------------------------------------
+// The classic view has no boards, so projects and currently come back as rows.
 const LINKS = [
   {
     label: 'linkedin',
@@ -33,6 +33,18 @@ const LINKS = [
     label: 'resume',
     desc: 'view pdf',
     url: 'assets/julianne-edes-resume.pdf',
+  },
+  {
+    label: 'projects',
+    desc: 'coming soon',
+    message: 'no projects listed yet — check back soon.',
+    classicOnly: true,
+  },
+  {
+    label: 'currently',
+    desc: "what i'm up to",
+    toggle: 'now-panel',
+    classicOnly: true,
   },
 ];
 
@@ -143,36 +155,7 @@ const BOARDS = [
 
 const NOTE_COLORS = ['#fde68a', '#fbcfe8', '#bfdbfe', '#bbf7d0', '#fed7aa'];
 
-// ---- the readable half -----------------------------------------------------
-(function renderLinks() {
-  const list = document.getElementById('links');
-  LINKS.forEach((link) => {
-    const li = document.createElement('li');
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    if (link.tooltip) btn.title = link.tooltip;
-
-    const arrow = document.createElement('span');
-    arrow.className = 'arrow';
-    arrow.textContent = '→';
-
-    const label = document.createElement('span');
-    label.textContent = link.label;
-
-    const desc = document.createElement('span');
-    desc.className = 'desc';
-    desc.textContent = link.desc;
-
-    btn.append(arrow, label, desc);
-    btn.addEventListener('click', () => window.open(link.url, '_blank', 'noopener'));
-    li.appendChild(btn);
-    list.appendChild(li);
-  });
-})();
-
 // ---- saved state -----------------------------------------------------------
-// Two things persist: where a visitor dragged each item, and whatever they
-// pinned to the guestbook themselves.
 function loadStore() {
   try {
     const parsed = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
@@ -197,6 +180,127 @@ function save() {
   }
 }
 
+function el(tag, cls, text) {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+// ---- which view are we in --------------------------------------------------
+let view = 'board';
+try {
+  const saved = localStorage.getItem(VIEW_KEY);
+  if (saved === 'classic' || saved === 'board') view = saved;
+} catch (e) {}
+
+const viewSwitch = document.getElementById('view-switch');
+
+function setView(next, remember) {
+  view = next;
+  document.body.className = 'view-' + next;
+
+  Array.prototype.forEach.call(viewSwitch.children, (b) =>
+    b.setAttribute('aria-pressed', b.dataset.view === next ? 'true' : 'false')
+  );
+
+  if (zoomedId) zoomOut();
+  renderLinks();
+  renderGuestList();
+
+  // the cork has no width while it's hidden, so re-measure on the way back
+  if (next === 'board') {
+    fit();
+    paint();
+  }
+
+  if (remember) {
+    try {
+      localStorage.setItem(VIEW_KEY, next);
+    } catch (e) {}
+  }
+}
+
+Array.prototype.forEach.call(viewSwitch.children, (btn) => {
+  btn.addEventListener('click', () => setView(btn.dataset.view, true));
+});
+
+// ---- links -----------------------------------------------------------------
+const linkList = document.getElementById('links');
+const noteEl = document.getElementById('note');
+const nowPanel = document.getElementById('now-panel');
+
+function renderLinks() {
+  linkList.innerHTML = '';
+  noteEl.hidden = true;
+  nowPanel.hidden = true;
+
+  LINKS.filter((l) => view === 'classic' || !l.classicOnly).forEach((link) => {
+    const li = el('li');
+    const btn = el('button');
+    btn.type = 'button';
+    if (link.tooltip) btn.title = link.tooltip;
+
+    const arrow = el('span', 'arrow', '→');
+    const label = el('span', '', link.label);
+    const desc = el('span', 'desc', link.desc);
+
+    btn.append(arrow, label, desc);
+    btn.addEventListener('click', () => {
+      if (link.toggle) {
+        const panel = document.getElementById(link.toggle);
+        const opening = panel.hidden;
+        panel.hidden = !opening;
+        btn.classList.toggle('open', opening);
+        noteEl.hidden = true;
+      } else if (link.url) {
+        window.open(link.url, '_blank', 'noopener');
+        noteEl.hidden = true;
+      } else {
+        noteEl.textContent = link.message;
+        noteEl.hidden = false;
+      }
+    });
+
+    li.appendChild(btn);
+    linkList.appendChild(li);
+  });
+}
+
+// ---- the written guestbook (classic view) ----------------------------------
+const guestList = document.getElementById('guest-list');
+const guestEmpty = document.getElementById('guest-empty');
+
+function renderGuestList() {
+  if (view !== 'classic') return;
+
+  guestList.innerHTML = '';
+  guestList.appendChild(guestEmpty);
+  guestEmpty.hidden = store.guests.length > 0;
+
+  store.guests
+    .slice()
+    .reverse()
+    .forEach((entry) => {
+      const li = el('li', 'guest-item');
+
+      if (entry.kind === 'polaroid') {
+        const thumb = el('img', 'guest-thumb');
+        thumb.src = entry.src;
+        thumb.alt = entry.caption || 'a pinned photo';
+        li.appendChild(thumb);
+        li.appendChild(el('span', 'guest-text', entry.caption || 'a photo'));
+      } else {
+        const swatch = el('span', 'guest-swatch');
+        swatch.style.background = entry.color || NOTE_COLORS[0];
+        li.appendChild(swatch);
+        li.appendChild(el('span', 'guest-text', entry.text || ''));
+      }
+
+      guestList.appendChild(li);
+    });
+}
+
 // ---- sizing ----------------------------------------------------------------
 // Items are sized in pixels but positioned in percentages, so they have to
 // scale with the board or they'd swallow it whole on a small screen.
@@ -210,13 +314,6 @@ function fit() {
 // ---- building items --------------------------------------------------------
 const items = new Map(); // id -> { data, el }, only for the board on screen
 let zoomedId = null;
-
-function el(tag, cls, text) {
-  const node = document.createElement(tag);
-  if (cls) node.className = cls;
-  if (text !== undefined) node.textContent = text;
-  return node;
-}
 
 function buildPolaroid(data) {
   const node = el('div', 'polaroid');
@@ -288,17 +385,13 @@ const boardDots = document.getElementById('board-dots');
 const toolbar = document.getElementById('toolbar');
 let current = 0;
 
-function currentBoard() {
-  return BOARDS[current];
-}
-
 function itemsFor(b) {
   // the guestbook also carries whatever this visitor pinned
   return b.open ? b.items.concat(store.guests) : b.items;
 }
 
 function paint() {
-  const b = currentBoard();
+  const b = BOARDS[current];
 
   items.forEach((entry) => entry.el.remove());
   items.clear();
@@ -350,7 +443,8 @@ document.getElementById('board-prev').addEventListener('click', () => go(current
 document.getElementById('board-next').addEventListener('click', () => go(current + 1, 1));
 
 window.addEventListener('keydown', (e) => {
-  if (zoomedId || !document.getElementById('compose-layer').hidden) return;
+  if (view !== 'board' || zoomedId) return;
+  if (!document.getElementById('compose-layer').hidden) return;
   if (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
   if (e.key === 'ArrowLeft') go(current - 1, -1);
   if (e.key === 'ArrowRight') go(current + 1, 1);
@@ -551,7 +645,23 @@ function dropOldestPhoto() {
   return true;
 }
 
+function keep(data, spot, z) {
+  store.guests.push(Object.assign({}, data, { x: spot.x, y: spot.y }));
+  store.positions[data.id] = { x: spot.x, y: spot.y, z: z };
+  // over quota: shed the oldest photo and try once more
+  if (!save() && dropOldestPhoto()) save();
+  renderGuestList();
+}
+
 function addGuestItem(data) {
+  // In the classic view the cork isn't on screen, so there's nothing to measure
+  // and nothing to animate: park it somewhere sensible for when they flip over.
+  if (view !== 'board') {
+    store.top = (store.top || 10) + 1;
+    keep(data, { x: 4 + Math.random() * 68, y: 6 + Math.random() * 62 }, store.top);
+    return;
+  }
+
   // the guestbook is the only board that takes these
   const guestbook = BOARDS.findIndex((b) => b.open);
   if (current !== guestbook) {
@@ -576,11 +686,7 @@ function addGuestItem(data) {
   bringToFront(live, node);
   boardEmpty.hidden = true;
 
-  store.guests.push(Object.assign({}, data, { x: spot.x, y: spot.y }));
-  store.positions[data.id] = { x: spot.x, y: spot.y, z: live.z };
-
-  // over quota: shed the oldest photo and try once more
-  if (!save() && dropOldestPhoto()) save();
+  keep(data, spot, live.z);
 }
 
 function newId() {
@@ -643,17 +749,22 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !composeLayer.hidden) closeCompose();
 });
 
-document.getElementById('add-note').addEventListener('click', () => {
-  composeText.value = '';
-  composeLeft.textContent = '180';
-  composePin.disabled = true;
-  composeLayer.hidden = false;
-  composeText.focus();
-});
-
-// ---- photos ----------------------------------------------------------------
+// ---- the add buttons, which appear in both views ---------------------------
 const fileInput = document.getElementById('file-input');
-document.getElementById('add-photo').addEventListener('click', () => fileInput.click());
+
+document.querySelectorAll('[data-add]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    if (btn.dataset.add === 'photo') {
+      fileInput.click();
+      return;
+    }
+    composeText.value = '';
+    composeLeft.textContent = '180';
+    composePin.disabled = true;
+    composeLayer.hidden = false;
+    composeText.focus();
+  });
+});
 
 // Shrink before storing: a phone photo is several MB, and localStorage gives
 // us about 5MB total for everything on the board.
@@ -707,7 +818,6 @@ fileInput.addEventListener('change', async () => {
 });
 
 // ---- go --------------------------------------------------------------------
-fit();
 window.addEventListener('resize', fit);
 if (narrow.addEventListener) narrow.addEventListener('change', fit);
-paint();
+setView(view, false);
