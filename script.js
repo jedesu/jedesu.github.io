@@ -535,37 +535,69 @@ function createDome(canvas) {
     return nearest;
   });
 
-  // one marker per trip: a pin head, a halo, and an invisible hit target
+  // Shared between every pin, so ten of them cost one geometry each. The
+  // cylinder and sphere both stand along Y; the group gets turned so that Y
+  // points straight out of the globe, which is what makes them look stuck in.
+  const stemGeo = new THREE.CylinderGeometry(0.024, 0.052, 0.4, 8);
+  stemGeo.translate(0, 0.2, 0);
+  const headGeo = new THREE.SphereGeometry(0.128, 16, 14);
+  headGeo.scale(1, 0.84, 1);
+  headGeo.translate(0, 0.46, 0);
+  const collarGeo = new THREE.TorusGeometry(0.092, 0.024, 8, 18);
+  collarGeo.rotateX(-Math.PI / 2);
+  collarGeo.translate(0, 0.02, 0);
+
+  const stemMat = new THREE.MeshLambertMaterial({ color: 0x7a6552 });
+  const UP = new THREE.Vector3(0, 1, 0);
+
+  // one pushpin per trip, plus an invisible target around its head
   const markers = TRIPS.map((trip, i) => {
     const at = spots[i];
+    const out = at.clone().normalize();
     const colour = trip.upcoming ? 0xd2601a : 0xb03a3a;
-    // never more than half way to the neighbour, so hit areas can't swap places
+    // never reach more than half way to the neighbour, so two pins that are
+    // close together can't steal each other's taps
     const reach = Math.max(0.13, Math.min(0.55, elbowRoom[i] * 0.45));
-    const size = Math.min(0.18, reach * 0.85);
+    const scale = Math.max(0.55, Math.min(1.15, reach / 0.4));
 
+    const pin = new THREE.Group();
+    pin.position.copy(at);
+    pin.quaternion.setFromUnitVectors(UP, out);
+    pin.scale.setScalar(scale);
+    group.add(pin);
+
+    pin.add(new THREE.Mesh(stemGeo, stemMat));
+
+    // phong rather than basic, so the pin head catches a highlight and reads
+    // as a rounded object instead of a flat dot
     const head = new THREE.Mesh(
-      new THREE.SphereGeometry(size, 14, 14),
-      new THREE.MeshBasicMaterial({ color: colour })
+      headGeo,
+      new THREE.MeshPhongMaterial({
+        color: colour,
+        shininess: 80,
+        specular: 0x9a9a9a,
+        emissive: 0x000000,
+      })
     );
-    head.position.copy(at);
-    group.add(head);
+    pin.add(head);
 
-    const halo = new THREE.Mesh(
-      new THREE.SphereGeometry(size * 1.9, 14, 14),
-      new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 0.3 })
+    const collar = new THREE.Mesh(
+      collarGeo,
+      new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 0.38 })
     );
-    halo.position.copy(at);
-    group.add(halo);
+    pin.add(collar);
 
+    // the head is what you aim at, so the target sits around it, not the base
     const hit = new THREE.Mesh(
-      new THREE.SphereGeometry(reach, 8, 8),
+      new THREE.SphereGeometry(Math.max(reach, 0.2 * scale), 8, 8),
       new THREE.MeshBasicMaterial({ visible: false })
     );
-    hit.position.copy(at);
+    hit.position.copy(out).multiplyScalar(at.length() + 0.46 * scale);
     hit.userData.index = i;
     group.add(hit);
 
-    return { head, halo, hit, at: at, crowded: elbowRoom[i] < 1.2 };
+    return { pin: pin, head: head, collar: collar, hit: hit, at: at, scale: scale,
+             crowded: elbowRoom[i] < 1.2 };
   });
 
   const raycaster = new THREE.Raycaster();
@@ -610,11 +642,37 @@ function createDome(canvas) {
     last = { x: e.clientX, y: e.clientY };
   }
 
+  // outside the glass, which is a circle with overflow hidden and would crop it
+  const tip = document.createElement('div');
+  tip.className = 'dome-tip';
+  tip.hidden = true;
+  const domeEl = canvas.closest('.dome');
+  domeEl.appendChild(tip);
+
+  function nameUnder(e) {
+    const i = markerAt(e.clientX, e.clientY);
+    if (i < 0) {
+      tip.hidden = true;
+      return -1;
+    }
+    const box = domeEl.getBoundingClientRect();
+    tip.textContent = TRIPS[i].place;
+    tip.style.left = e.clientX - box.left + 'px';
+    tip.style.top = e.clientY - box.top + 'px';
+    tip.hidden = false;
+    return i;
+  }
+
+  canvas.addEventListener('pointerleave', () => {
+    tip.hidden = true;
+  });
+
   function move(e) {
     if (e.pointerId !== pointerId) {
-      canvas.style.cursor = markerAt(e.clientX, e.clientY) >= 0 ? 'pointer' : 'grab';
+      canvas.style.cursor = nameUnder(e) >= 0 ? 'pointer' : 'grab';
       return;
     }
+    tip.hidden = true; // nothing to label while it's being spun
     if (!dragging) return;
     travelled += Math.abs(e.clientX - last.x) + Math.abs(e.clientY - last.y);
     target.y += (e.clientX - last.x) * 0.006;
@@ -671,9 +729,10 @@ function createDome(canvas) {
     const now = performance.now();
     markers.forEach((m, i) => {
       const on = i === pickedTrip;
-      m.head.scale.setScalar(on ? 1.5 : 1);
-      m.halo.scale.setScalar((on ? 1.5 : 1) * (1 + 0.3 * Math.sin(now / 420 + i)));
-      m.halo.material.opacity = on ? 0.45 : 0.22;
+      const bob = on ? 1 + 0.05 * Math.sin(now / 320) : 1;
+      m.pin.scale.setScalar(m.scale * (on ? 1.4 : 1) * bob);
+      m.collar.material.opacity = on ? 0.62 : 0.3;
+      m.head.material.emissive.setHex(on ? 0x3a1400 : 0x000000);
     });
 
     renderer.render(scene, camera);

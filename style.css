@@ -655,6 +655,7 @@ body {
 }
 
 .dome {
+  position: relative; /* the hover label is placed against this */
   width: calc(300px * var(--scale));
 }
 
@@ -706,6 +707,26 @@ body {
   content: 'globe needs webgl';
   font-size: calc(11px * var(--scale));
   color: var(--muted);
+}
+
+/* the name of whichever pin the cursor is over */
+.dome-tip {
+  position: absolute;
+  z-index: 4;
+  transform: translate(12px, -140%);
+  padding: calc(4px * var(--scale)) calc(9px * var(--scale));
+  border-radius: 3px;
+  background: rgba(35, 25, 16, 0.88);
+  color: #f6f1e7;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: calc(10.5px * var(--scale));
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.dome-tip[hidden] {
+  display: none;
 }
 
 .dome-caption {
