@@ -49,32 +49,30 @@ const LINKS = [
 ];
 
 // ---- trips -----------------------------------------------------------------
-// Each one is a marker on the dome. Drop photos into assets/trips/ and list
-// them here; clicking the marker pins that trip's photos up beside the globe.
-// A trip with no photos yet shows empty frames with its name on them.
-//
-// The three marked "example" are placeholders to show the thing working —
-// swap in real places and delete the rest.
+// Each one is a landmark on the dome. `icon` is any emoji — swap it for
+// whatever suits the place. Drop photos into assets/trips/ and list them here;
+// tapping the landmark pins that trip's photos up beside the globe. A trip with
+// no photos yet shows empty frames with its name on them.
 const TRIPS = [
   // japan, the next one — four stops close enough together that the globe
   // leans in when you tap one, so they come apart
-  { id: 'tokyo', place: 'tokyo', region: 'japan', when: 'the next one', lat: 35.68, lon: 139.69, upcoming: true, photos: [] },
-  { id: 'kyoto', place: 'kyoto', region: 'japan', when: 'the next one', lat: 35.01, lon: 135.77, upcoming: true, photos: [] },
-  { id: 'hokkaido', place: 'hokkaido', region: 'japan', when: 'the next one', lat: 43.06, lon: 141.35, upcoming: true, photos: [] },
-  { id: 'okinawa', place: 'okinawa', region: 'japan', when: 'been', lat: 26.21, lon: 127.68, photos: [] },
+  { id: 'tokyo', icon: '🗼', place: 'tokyo', region: 'japan', when: 'the next one', lat: 35.68, lon: 139.69, upcoming: true, photos: [] },
+  { id: 'kyoto', icon: '⛩️', place: 'kyoto', region: 'japan', when: 'the next one', lat: 35.01, lon: 135.77, upcoming: true, photos: [] },
+  { id: 'hokkaido', icon: '❄️', place: 'hokkaido', region: 'japan', when: 'the next one', lat: 43.06, lon: 141.35, upcoming: true, photos: [] },
+  { id: 'okinawa', icon: '🐠', place: 'okinawa', region: 'japan', when: 'been', lat: 26.21, lon: 127.68, photos: [] },
 
-  { id: 'bangkok', place: 'bangkok', region: 'thailand', when: 'been', lat: 13.76, lon: 100.5, photos: [] },
-  { id: 'chiangmai', place: 'chiang mai', region: 'thailand', when: 'been', lat: 18.79, lon: 98.98, photos: [] },
-  { id: 'whistler', place: 'whistler', region: 'canada', when: 'been', lat: 50.12, lon: -122.95, photos: [] },
-  { id: 'oahu', place: 'oahu', region: 'hawaii', when: 'been', lat: 21.31, lon: -157.86, photos: [] },
-  { id: 'nyc', place: 'new york', region: 'usa', when: 'been', lat: 40.71, lon: -74.01, photos: [] },
-  { id: 'santiago', place: 'santiago', region: 'chile', when: 'been', lat: -33.45, lon: -70.67, photos: [] },
+  { id: 'bangkok', icon: '🛕', place: 'bangkok', region: 'thailand', when: 'been', lat: 13.76, lon: 100.5, photos: [] },
+  { id: 'chiangmai', icon: '🐘', place: 'chiang mai', region: 'thailand', when: 'been', lat: 18.79, lon: 98.98, photos: [] },
+  { id: 'whistler', icon: '🎿', place: 'whistler', region: 'canada', when: 'been', lat: 50.12, lon: -122.95, photos: [] },
+  { id: 'oahu', icon: '🌺', place: 'oahu', region: 'hawaii', when: 'been', lat: 21.31, lon: -157.86, photos: [] },
+  { id: 'nyc', icon: '🗽', place: 'new york', region: 'usa', when: 'been', lat: 40.71, lon: -74.01, photos: [] },
+  { id: 'santiago', icon: '🏔️', place: 'santiago', region: 'chile', when: 'been', lat: -33.45, lon: -70.67, photos: [] },
 
   // These three were given as whole countries, so they're labelled as such and
   // pinned at the capital. Give me the city and I'll put the pin on it.
-  { id: 'korea', place: 'south korea', when: 'been', lat: 37.57, lon: 126.98, photos: [] },
-  { id: 'nz', place: 'new zealand', when: 'been', lat: -41.29, lon: 174.78, photos: [] },
-  { id: 'argentina', place: 'argentina', when: 'been', lat: -34.6, lon: -58.38, photos: [] },
+  { id: 'korea', icon: '🏯', place: 'south korea', when: 'been', lat: 37.57, lon: 126.98, photos: [] },
+  { id: 'nz', icon: '🥝', place: 'new zealand', when: 'been', lat: -41.29, lon: 174.78, photos: [] },
+  { id: 'argentina', icon: '💃', place: 'argentina', when: 'been', lat: -34.6, lon: -58.38, photos: [] },
 ];
 
 // "tokyo, japan" on the globe; the polaroids stay on the short name so the
@@ -498,91 +496,134 @@ function createDome(canvas) {
     );
   }
 
-  // how far each trip sits from its closest neighbour, so a cluster of places
-  // a few degrees apart doesn't end up as one unpickable blob
-  const spots = TRIPS.map((t) => toVec(t.lat, t.lon, R * 1.015));
-  const elbowRoom = spots.map((a, i) => {
-    let nearest = Infinity;
-    spots.forEach((b, j) => {
-      if (i !== j) nearest = Math.min(nearest, a.distanceTo(b));
-    });
-    return nearest;
+  // ---- landmarks ----------------------------------------------------------
+  // Each place gets a badge with its own icon, floating just off the surface on
+  // a short leader line down to the exact spot. Places that sit on top of each
+  // other — tokyo and kyoto are 3 degrees apart — are fanned out around their
+  // shared middle so every badge stays its own target. That's what lets the
+  // camera stay put: nothing has to be zoomed into to be picked apart.
+  const spots = TRIPS.map((t) => toVec(t.lat, t.lon, R));
+  const CLUSTER = 1.1; // closer than this and they get fanned
+  const LIFT = 0.62; // how far a badge floats off the surface
+  const FAN = 0.62; // how far out from the middle of a cluster they spread
+
+  // single-linkage grouping: anything within CLUSTER of anything already in a
+  // group joins that group
+  const groupOf = spots.map(() => -1);
+  let groupCount = 0;
+  spots.forEach((a, i) => {
+    if (groupOf[i] >= 0) return;
+    groupOf[i] = groupCount++;
+    let grew = true;
+    while (grew) {
+      grew = false;
+      spots.forEach((b, j) => {
+        if (groupOf[j] >= 0) return;
+        const near = spots.some((c, k) => groupOf[k] === groupOf[i] && b.distanceTo(c) < CLUSTER);
+        if (near) {
+          groupOf[j] = groupOf[i];
+          grew = true;
+        }
+      });
+    }
   });
 
-  // Shared between every pin, so ten of them cost one geometry each. The
-  // cylinder and sphere both stand along Y; the group gets turned so that Y
-  // points straight out of the globe, which is what makes them look stuck in.
-  const stemGeo = new THREE.CylinderGeometry(0.024, 0.052, 0.4, 8);
-  stemGeo.translate(0, 0.2, 0);
-  const headGeo = new THREE.SphereGeometry(0.128, 16, 14);
-  headGeo.scale(1, 0.84, 1);
-  headGeo.translate(0, 0.46, 0);
-  const collarGeo = new THREE.TorusGeometry(0.092, 0.024, 8, 18);
-  collarGeo.rotateX(-Math.PI / 2);
-  collarGeo.translate(0, 0.02, 0);
+  // where each badge hangs, fanned around the middle of its group
+  const perches = spots.map((at, i) => {
+    const mates = groupOf.map((g, j) => (g === groupOf[i] ? j : -1)).filter((j) => j >= 0);
+    const out = at.clone().normalize();
+    if (mates.length === 1) return out.clone().multiplyScalar(R + LIFT);
 
-  const stemMat = new THREE.MeshLambertMaterial({ color: 0x7a6552 });
+    // the middle of the group, and a pair of axes lying flat against the globe
+    const mid = new THREE.Vector3();
+    mates.forEach((j) => mid.add(spots[j]));
+    mid.normalize();
+    const side = new THREE.Vector3(0, 1, 0).cross(mid);
+    if (side.lengthSq() < 1e-6) side.set(1, 0, 0);
+    side.normalize();
+    const up = mid.clone().cross(side).normalize();
+
+    const turn = (mates.indexOf(i) / mates.length) * Math.PI * 2 - Math.PI / 2;
+    return mid
+      .clone()
+      .multiplyScalar(R + LIFT)
+      .addScaledVector(side, Math.cos(turn) * FAN)
+      .addScaledVector(up, Math.sin(turn) * FAN);
+  });
+
+  // the icon, drawn onto a little paper badge
+  function badge(trip) {
+    const px = 128;
+    const c = document.createElement('canvas');
+    c.width = px;
+    c.height = px;
+    const g = c.getContext('2d');
+
+    g.beginPath();
+    g.arc(px / 2, px / 2, px / 2 - 6, 0, Math.PI * 2);
+    g.fillStyle = '#fdfbf4';
+    g.fill();
+    g.lineWidth = 6;
+    g.strokeStyle = trip.upcoming ? '#d2601a' : '#b03a3a';
+    g.stroke();
+
+    g.font = '62px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(trip.icon || '•', px / 2, px / 2 + 4);
+
+    const tex = new THREE.CanvasTexture(c);
+    tex.minFilter = THREE.LinearFilter;
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }));
+    sprite.scale.set(0.66, 0.66, 1);
+    return sprite;
+  }
+
+  const leaderMat = new THREE.MeshBasicMaterial({ color: 0x4a3a2c, transparent: true, opacity: 0.55 });
+  const footGeo = new THREE.SphereGeometry(0.07, 10, 10);
   const UP = new THREE.Vector3(0, 1, 0);
 
-  // one pushpin per trip, plus an invisible target around its head
   const markers = TRIPS.map((trip, i) => {
     const at = spots[i];
-    const out = at.clone().normalize();
+    const perch = perches[i];
     const colour = trip.upcoming ? 0xd2601a : 0xb03a3a;
-    // never reach more than half way to the neighbour, so two pins that are
-    // close together can't steal each other's taps
-    const reach = Math.max(0.13, Math.min(0.55, elbowRoom[i] * 0.45));
-    const scale = Math.max(0.55, Math.min(1.15, reach / 0.4));
 
-    const pin = new THREE.Group();
-    pin.position.copy(at);
-    pin.quaternion.setFromUnitVectors(UP, out);
-    pin.scale.setScalar(scale);
-    group.add(pin);
+    // a dot on the exact spot
+    const foot = new THREE.Mesh(footGeo, new THREE.MeshBasicMaterial({ color: colour }));
+    foot.position.copy(at);
+    group.add(foot);
 
-    pin.add(new THREE.Mesh(stemGeo, stemMat));
+    // a thin post from the spot up to the badge
+    const span = perch.clone().sub(at);
+    const leader = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, span.length(), 6), leaderMat);
+    leader.position.copy(at).addScaledVector(span, 0.5);
+    leader.quaternion.setFromUnitVectors(UP, span.clone().normalize());
+    group.add(leader);
 
-    // phong rather than basic, so the pin head catches a highlight and reads
-    // as a rounded object instead of a flat dot
-    const head = new THREE.Mesh(
-      headGeo,
-      new THREE.MeshPhongMaterial({
-        color: colour,
-        shininess: 80,
-        specular: 0x9a9a9a,
-        emissive: 0x000000,
-      })
-    );
-    pin.add(head);
+    const icon = badge(trip);
+    icon.position.copy(perch);
+    group.add(icon);
 
-    const collar = new THREE.Mesh(
-      collarGeo,
-      new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 0.38 })
-    );
-    pin.add(collar);
-
-    // the head is what you aim at, so the target sits around it, not the base
+    // the badge is what you aim at
     const hit = new THREE.Mesh(
-      new THREE.SphereGeometry(Math.max(reach, 0.2 * scale), 8, 8),
+      new THREE.SphereGeometry(0.38, 8, 8),
       new THREE.MeshBasicMaterial({ visible: false })
     );
-    hit.position.copy(out).multiplyScalar(at.length() + 0.46 * scale);
+    hit.position.copy(perch);
     hit.userData.index = i;
     group.add(hit);
 
-    return { pin: pin, head: head, collar: collar, hit: hit, at: at, scale: scale,
-             crowded: elbowRoom[i] < 1.2 };
+    return { icon: icon, foot: foot, hit: hit, at: at, perch: perch };
   });
 
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
   const TILT = 1.35; // ~77°, short of the pole so the globe can't roll over
-  const FAR = 14.5; // the resting camera distance
-  const NEAR = 9; // close enough that places a few degrees apart come apart
   const spin = { x: 0.2, y: 0 };
   const target = { x: 0.2, y: 0 };
-  let dolly = FAR;
-  let targetDolly = FAR;
+  // a timed flight to a place, so picking one is a deliberate move rather than
+  // the lazy drift-towards-it that easing alone gives
+  let flight = null;
   let drift = true;
   let dragging = false;
   let last = { x: 0, y: 0 };
@@ -612,6 +653,7 @@ function createDome(canvas) {
     } catch (err) {}
     dragging = true;
     drift = false;
+    flight = null; // your hand wins over any move in progress
     travelled = 0;
     last = { x: e.clientX, y: e.clientY };
   }
@@ -661,14 +703,7 @@ function createDome(canvas) {
     dragging = false;
     if (travelled < 6) {
       const i = markerAt(e.clientX, e.clientY);
-      if (i >= 0) {
-        // lean in for a place with neighbours on top of it, so the next tap
-        // can tell them apart; tapping bare globe pulls back out again
-        targetDolly = markers[i].crowded ? NEAR : FAR;
-        pickTrip(i);
-      } else {
-        targetDolly = FAR;
-      }
+      if (i >= 0) goToTrip(i);
     }
     setTimeout(() => {
       drift = true;
@@ -691,22 +726,26 @@ function createDome(canvas) {
   function frame() {
     if (!running) return;
     requestAnimationFrame(frame);
-    if (drift) target.y += 0.0016;
-    spin.x += (target.x - spin.x) * 0.09;
-    spin.y += (target.y - spin.y) * 0.09;
+    const now = performance.now();
+    if (flight) {
+      const t = Math.min(1, (now - flight.start) / flight.span);
+      const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      spin.x = flight.fromX + (flight.toX - flight.fromX) * e;
+      spin.y = flight.fromY + (flight.toY - flight.fromY) * e;
+      if (t >= 1) flight = null;
+    } else {
+      if (drift) target.y += 0.0016;
+      spin.x += (target.x - spin.x) * 0.13;
+      spin.y += (target.y - spin.y) * 0.13;
+    }
     group.rotation.x = spin.x;
     group.rotation.y = spin.y;
 
-    dolly += (targetDolly - dolly) * 0.08;
-    camera.position.z = dolly;
-
-    const now = performance.now();
     markers.forEach((m, i) => {
       const on = i === pickedTrip;
-      const bob = on ? 1 + 0.05 * Math.sin(now / 320) : 1;
-      m.pin.scale.setScalar(m.scale * (on ? 1.4 : 1) * bob);
-      m.collar.material.opacity = on ? 0.62 : 0.3;
-      m.head.material.emissive.setHex(on ? 0x3a1400 : 0x000000);
+      const size = 0.66 * (on ? 1.34 : 1) * (on ? 1 + 0.035 * Math.sin(now / 340) : 1);
+      m.icon.scale.set(size, size, 1);
+      m.icon.material.opacity = on ? 1 : 0.9;
     });
 
     renderer.render(scene, camera);
@@ -716,8 +755,7 @@ function createDome(canvas) {
   frame();
 
   // spin the chosen place round to the front
-  // `close` leans the camera in when the place has neighbours on top of it
-  function face(lat, lon, close) {
+  function face(lat, lon) {
     const at = toVec(lat, lon, 1);
     // where it sits now, and where it needs to be to point at the camera
     // rotating the group by `a` moves a point from angle p to p - a, so to land
@@ -729,10 +767,13 @@ function createDome(canvas) {
     while (turn - target.y < -Math.PI) turn += Math.PI * 2;
     target.y = turn;
     target.x = Math.max(-TILT, Math.min(TILT, (lat * Math.PI) / 180));
-    if (close) {
-      const i = TRIPS.findIndex((t) => t.lat === lat && t.lon === lon);
-      targetDolly = i >= 0 && markers[i].crowded ? NEAR : FAR;
-    }
+
+    // whatever the cursor was over is about to move out from under it
+    tip.hidden = true;
+
+    // ease in and out over a fixed span, rather than creeping towards it
+    flight = { fromX: spin.x, fromY: spin.y, toX: target.x, toY: target.y,
+               start: performance.now(), span: 760 };
     drift = false;
     setTimeout(() => {
       drift = true;
@@ -756,7 +797,8 @@ function createDome(canvas) {
         const m = markers[i];
         if (!m) return null;
         group.updateMatrixWorld(true);
-        const v = m.at.clone().applyMatrix4(group.matrixWorld).project(camera);
+        // the badge, since that's the thing you actually click
+        const v = m.perch.clone().applyMatrix4(group.matrixWorld).project(camera);
         const w = canvas.clientWidth;
         return { x: (v.x * 0.5 + 0.5) * w, y: (-v.y * 0.5 + 0.5) * w, front: v.z < 1 };
       },
@@ -764,15 +806,14 @@ function createDome(canvas) {
       settle: function () {
         spin.x = target.x;
         spin.y = target.y;
-        dolly = targetDolly;
+        flight = null;
         drift = false;
         group.rotation.x = spin.x; // through now, not on the next frame
         group.rotation.y = spin.y;
-        camera.position.z = dolly;
-        camera.updateMatrixWorld(true);
+        group.updateMatrixWorld(true);
       },
-      dolly: function () {
-        return { now: dolly, target: targetDolly };
+      flying: function () {
+        return flight !== null;
       },
     },
   };
@@ -798,7 +839,7 @@ function pickTrip(i) {
 function goToTrip(i) {
   pickTrip(i);
   const trip = TRIPS[i];
-  if (dome && trip) dome.face(trip.lat, trip.lon, true);
+  if (dome && trip) dome.face(trip.lat, trip.lon);
 }
 
 // swap only the photos, so the globe keeps spinning where it was
