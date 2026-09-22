@@ -1105,6 +1105,144 @@ body {
   color: var(--text);
 }
 
+/* ===================================================================
+   the sticker drawer
+   =================================================================== */
+
+.drawer {
+  margin-top: 30px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.drawer-head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.drawer-head .label {
+  margin-bottom: 0;
+}
+
+.drawer-sub {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--faint);
+}
+
+/* the shelf they sit on */
+.tray {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 116px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: #f2f0e9;
+  box-shadow: inset 0 1px 3px rgba(60, 40, 20, 0.14);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.tray-empty {
+  font-size: 12.5px;
+  color: var(--faint);
+  line-height: 1.6;
+  max-width: 48ch;
+}
+
+.tray-empty[hidden] {
+  display: none;
+}
+
+.tray-sticker {
+  flex-shrink: 0;
+  width: 84px;
+  height: 84px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: grab;
+  touch-action: none;
+  transition: transform 0.14s ease;
+}
+
+.tray-sticker:hover,
+.tray-sticker:focus-visible {
+  transform: translateY(-3px) rotate(-2deg);
+}
+
+.tray-sticker:active {
+  cursor: grabbing;
+}
+
+.tray-sticker img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 4px rgba(60, 40, 20, 0.28));
+}
+
+/* one being carried over to the board */
+.sticker-ghost {
+  position: fixed;
+  z-index: 1200;
+  width: 120px;
+  height: 120px;
+  margin: -60px 0 0 -60px;
+  pointer-events: none;
+  filter: drop-shadow(0 12px 16px rgba(60, 40, 20, 0.4));
+  transform: rotate(-4deg) scale(1.05);
+}
+
+.sticker-ghost img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* the cork lights up while you're carrying one over it */
+.board.taking-sticker {
+  box-shadow:
+    inset 0 0 0 3px rgba(210, 96, 26, 0.55),
+    inset 0 2px 7px rgba(90, 55, 20, 0.34);
+}
+
+.drawer-note {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.drawer-note[hidden] {
+  display: none;
+}
+
+.drawer-note.warn {
+  color: var(--accent);
+}
+
+/* a sticker stuck on the board — no pin, they stick by themselves */
+.sticker-art {
+  width: calc(150px * var(--scale));
+  height: calc(150px * var(--scale));
+}
+
+.sticker-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+  filter: drop-shadow(0 3px 5px rgba(60, 40, 20, 0.32));
+}
+
 /* ---- responsive ---- */
 /* Below this width the cork is too small to arrange anything on, so items
    stack down it and dragging is switched off. */
@@ -1144,6 +1282,9 @@ body {
     justify-content: center;
     flex-direction: column-reverse;
   }
+
+  .drawer-head { justify-content: center; }
+  .drawer-sub { flex-basis: 100%; text-align: center; }
 }
 
 @media (prefers-reduced-motion: reduce) {

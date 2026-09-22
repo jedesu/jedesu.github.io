@@ -58,6 +58,26 @@
     </div>
   </div>
 
+  <!-- ===== the sticker drawer ===== -->
+  <div class="drawer">
+    <div class="drawer-head">
+      <h3 class="label">// stickers</h3>
+      <p class="drawer-sub" id="drawer-sub">drag one onto the board</p>
+      <button type="button" class="tool" id="make-sticker">
+        <span class="tool-glyph" aria-hidden="true">✳</span> make a sticker
+      </button>
+    </div>
+
+    <div class="tray" id="tray">
+      <p class="tray-empty" id="tray-empty">
+        turn a photo into a cut-out sticker — it happens on your own device, the
+        photo is never uploaded
+      </p>
+    </div>
+
+    <p class="drawer-note" id="drawer-note" hidden></p>
+  </div>
+
 </section>
 
 <!-- ===== the written half: classic view only, the boards carry it otherwise ===== -->
@@ -159,6 +179,7 @@
 <button type="button" class="zoom-close" id="zoom-close" hidden aria-label="close">esc</button>
 
 <input type="file" id="file-input" accept="image/*" hidden>
+<input type="file" id="sticker-input" accept="image/*" hidden>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="firebase-config.js"></script>

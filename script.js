@@ -243,10 +243,12 @@ function loadStore() {
     return {
       positions: parsed.positions || {},
       guests: Array.isArray(parsed.guests) ? parsed.guests : [],
+      stickers: Array.isArray(parsed.stickers) ? parsed.stickers : [],
+      stuck: Array.isArray(parsed.stuck) ? parsed.stuck : [],
       top: parsed.top || 10,
     };
   } catch (e) {
-    return { positions: {}, guests: [], top: 10 };
+    return { positions: {}, guests: [], stickers: [], stuck: [], top: 10 };
   }
 }
 
@@ -860,6 +862,16 @@ function refreshTrip() {
     .forEach((d) => render(d));
 }
 
+function buildSticker(data) {
+  const node = el('div', 'sticker-art');
+  const img = el('img');
+  img.src = data.src;
+  img.alt = 'a sticker someone stuck on the board';
+  img.draggable = false;
+  node.appendChild(img);
+  return node;
+}
+
 function buildSticky(data) {
   const node = el('div', 'sticky');
   node.style.setProperty('--note', data.color || NOTE_COLORS[0]);
@@ -897,10 +909,15 @@ function render(data) {
       ? buildPolaroid
       : data.kind === 'card'
       ? buildCard
+      : data.kind === 'sticker'
+      ? buildSticker
       : buildSticky;
   wrap.appendChild(build(data));
 
-  if (data.kind !== 'globe') wrap.appendChild(el('div', data.tape ? 'tape' : 'pin'));
+  // a globe is a fixture and a sticker sticks by itself; the rest need holding up
+  if (data.kind !== 'globe' && data.kind !== 'sticker') {
+    wrap.appendChild(el('div', data.tape ? 'tape' : 'pin'));
+  }
 
   if (data.fresh) {
     wrap.classList.add('landing');
@@ -937,9 +954,9 @@ const toolbar = document.getElementById('toolbar');
 let current = 0;
 
 function itemsFor(b) {
-  if (b.dynamic) return b.dynamic();
-  // the guestbook also carries whatever this visitor pinned
-  return b.open ? b.items.concat(store.guests) : b.items;
+  const own = b.dynamic ? b.dynamic() : b.open ? b.items.concat(store.guests) : b.items;
+  // plus any stickers stuck to this particular board
+  return own.concat(store.stuck.filter((s) => s.board === b.id));
 }
 
 function paint() {
@@ -1381,3 +1398,329 @@ fileInput.addEventListener('change', async () => {
 window.addEventListener('resize', fit);
 if (narrow.addEventListener) narrow.addEventListener('change', fit);
 setView(view, false);
+
+// ---------------------------------------------------------------------------
+// Stickers
+//
+// A photo goes in, a cut-out sticker comes out, and it waits in the drawer
+// until someone drags it onto the cork. The cut-out runs on the visitor's own
+// machine — transformers.js with BiRefNet, fetched from a CDN the first time
+// anyone asks for it — so there's no key, no server and no bill, and the photo
+// never leaves their device. If the model won't load we still make a sticker,
+// just uncut rather than cut out.
+// ---------------------------------------------------------------------------
+
+const TRANSFORMERS = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0/dist/transformers.min.js';
+// Tried in order, lightest first: whichever the visitor's machine can afford.
+// A phone or a low-memory browser will fail to allocate the bigger one and fall
+// through to the plain sticker, which is why makeSticker never depends on this.
+const CUTOUT_MODELS = ['Xenova/modnet', 'onnx-community/BiRefNet_lite-ONNX'];
+const STICKER_PX = 320; // what we keep, before the board scales it
+const MAX_STICKERS = 8; // base64 PNGs are heavy and localStorage is about 5MB
+
+const tray = document.getElementById('tray');
+const trayEmpty = document.getElementById('tray-empty');
+const drawerNote = document.getElementById('drawer-note');
+const stickerInput = document.getElementById('sticker-input');
+
+function say(text, warn) {
+  drawerNote.textContent = text || '';
+  drawerNote.hidden = !text;
+  drawerNote.classList.toggle('warn', !!warn);
+}
+
+// ---- the cut-out ----------------------------------------------------------
+let cutterPromise = null;
+
+function getCutter() {
+  if (!cutterPromise) {
+    cutterPromise = (async () => {
+      const tf = await import(TRANSFORMERS);
+      tf.env.allowLocalModels = false;
+      let last = null;
+      for (const model of CUTOUT_MODELS) {
+        try {
+          return await tf.pipeline('background-removal', model);
+        } catch (err) {
+          last = err; // usually out of memory; try something smaller
+        }
+      }
+      throw last || new Error('no cutout model would load');
+    })().catch((err) => {
+      cutterPromise = null; // let them try again later
+      throw err;
+    });
+  }
+  return cutterPromise;
+}
+
+// The pipeline hands back a RawImage, whose helpers differ between versions —
+// take whichever way out it offers rather than assuming one.
+async function toCanvasAny(raw, max) {
+  if (raw && typeof raw.toCanvas === 'function') return drawToCanvas(raw.toCanvas(), max);
+  if (raw && typeof raw.toDataURL === 'function') return drawToCanvas(await loadImage(raw.toDataURL()), max);
+  if (raw && typeof raw.toBlob === 'function') {
+    const url = URL.createObjectURL(await raw.toBlob());
+    const canvas = drawToCanvas(await loadImage(url), max);
+    URL.revokeObjectURL(url);
+    return canvas;
+  }
+  // last resort: paint the pixel buffer ourselves
+  if (raw && raw.data && raw.width && raw.height) {
+    const channels = raw.channels || 4;
+    const canvas = document.createElement('canvas');
+    canvas.width = raw.width;
+    canvas.height = raw.height;
+    const shot = canvas.getContext('2d').createImageData(raw.width, raw.height);
+    for (let i = 0, p = 0; p < shot.data.length; i += channels, p += 4) {
+      shot.data[p] = raw.data[i];
+      shot.data[p + 1] = raw.data[i + (channels > 2 ? 1 : 0)];
+      shot.data[p + 2] = raw.data[i + (channels > 2 ? 2 : 0)];
+      shot.data[p + 3] = channels === 4 ? raw.data[i + 3] : 255;
+    }
+    canvas.getContext('2d').putImageData(shot, 0, 0);
+    return drawToCanvas(canvas, max);
+  }
+  throw new Error('the cutout came back in a shape we do not know');
+}
+
+function drawToCanvas(source, max) {
+  const ratio = Math.min(1, max / Math.max(source.width, source.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(source.width * ratio);
+  canvas.height = Math.round(source.height * ratio);
+  canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+// ---- the sticker look -----------------------------------------------------
+// Flatten the colours a little so it reads as drawn rather than photographed,
+// then lay a fat white border under the whole silhouette.
+function posterise(canvas, steps) {
+  const ctx = canvas.getContext('2d');
+  const px = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const d = px.data;
+  const band = 255 / (steps - 1);
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] < 8) continue;
+    d[i] = Math.round(d[i] / band) * band;
+    d[i + 1] = Math.round(d[i + 1] / band) * band;
+    d[i + 2] = Math.round(d[i + 2] / band) * band;
+  }
+  ctx.putImageData(px, 0, 0);
+}
+
+function addBorder(art, width) {
+  const pad = Math.ceil(width) + 2;
+  const out = document.createElement('canvas');
+  out.width = art.width + pad * 2;
+  out.height = art.height + pad * 2;
+  const ctx = out.getContext('2d');
+
+  // a solid white copy of the shape
+  const shape = document.createElement('canvas');
+  shape.width = art.width;
+  shape.height = art.height;
+  const sctx = shape.getContext('2d');
+  sctx.drawImage(art, 0, 0);
+  sctx.globalCompositeOperation = 'source-in';
+  sctx.fillStyle = '#fffdf8';
+  sctx.fillRect(0, 0, shape.width, shape.height);
+
+  // stamp it all the way round to fatten the outline
+  for (let a = 0; a < 32; a++) {
+    const t = (a / 32) * Math.PI * 2;
+    ctx.drawImage(shape, pad + Math.cos(t) * width, pad + Math.sin(t) * width);
+  }
+  ctx.drawImage(art, pad, pad);
+  return out;
+}
+
+// crops away the transparent margin the model usually leaves behind
+function trim(canvas) {
+  const ctx = canvas.getContext('2d');
+  const shot = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = shot.data;
+  const width = canvas.width;
+  const height = canvas.height;
+  let top = height;
+  let left = width;
+  let right = -1;
+  let bottom = -1;
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (data[(y * width + x) * 4 + 3] > 12) {
+        if (x < left) left = x;
+        if (x > right) right = x;
+        if (y < top) top = y;
+        if (y > bottom) bottom = y;
+      }
+    }
+  }
+
+  if (right < 0) return canvas; // nothing survived, keep what we had
+  const out = document.createElement('canvas');
+  out.width = right - left + 1;
+  out.height = bottom - top + 1;
+  out.getContext('2d').drawImage(canvas, -left, -top);
+  return out;
+}
+
+async function makeSticker(file) {
+  const url = URL.createObjectURL(file);
+  const plate = drawToCanvas(await loadImage(url), STICKER_PX);
+  URL.revokeObjectURL(url);
+
+  let art = plate;
+  let cutOut = false;
+  try {
+    say('reading the photo — the first one downloads the model, so give it a moment');
+    const cutter = await getCutter();
+    const result = await cutter(plate.toDataURL('image/png'));
+    const raw = Array.isArray(result) ? result[0] : result;
+    art = trim(await toCanvasAny(raw, STICKER_PX));
+    cutOut = true;
+  } catch (err) {
+    // out of memory, no network for the model, or the pipeline moved on
+    say(
+      "couldn't cut the background out on this device — here's the whole photo " +
+        'as a sticker instead',
+      true
+    );
+  }
+
+  posterise(art, 6);
+  const framed = addBorder(art, Math.max(4, art.width * 0.035));
+  if (cutOut) say('');
+  return framed.toDataURL('image/png');
+}
+
+// ---- the drawer -----------------------------------------------------------
+function renderTray() {
+  Array.prototype.slice.call(tray.querySelectorAll('.tray-sticker')).forEach((n) => n.remove());
+  trayEmpty.hidden = store.stickers.length > 0;
+
+  store.stickers.forEach((sticker) => {
+    const btn = el('button', 'tray-sticker');
+    btn.type = 'button';
+    btn.title = 'drag me onto the board';
+    const img = el('img');
+    img.src = sticker.src;
+    img.alt = 'a sticker';
+    btn.appendChild(img);
+    carry(btn, sticker);
+    tray.appendChild(btn);
+  });
+}
+
+document.getElementById('make-sticker').addEventListener('click', () => stickerInput.click());
+
+stickerInput.addEventListener('change', async () => {
+  const file = stickerInput.files && stickerInput.files[0];
+  stickerInput.value = '';
+  if (!file || file.type.indexOf('image/') !== 0) return;
+
+  try {
+    const src = await makeSticker(file);
+    store.stickers.push({ id: 's' + newId(), src: src });
+    while (store.stickers.length > MAX_STICKERS) store.stickers.shift();
+    if (!save()) {
+      store.stickers.shift();
+      save();
+      say('the drawer is full, so the oldest sticker made way for this one', true);
+    }
+    renderTray();
+  } catch (err) {
+    say("that photo couldn't be turned into a sticker", true);
+  }
+});
+
+// ---- carrying one to the board --------------------------------------------
+function carry(btn, sticker) {
+  let ghost = null;
+  let pointerId = null;
+
+  btn.addEventListener('pointerdown', (e) => {
+    if (e.button && e.button !== 0) return;
+    pointerId = e.pointerId;
+    try {
+      btn.setPointerCapture(pointerId);
+    } catch (err) {}
+
+    ghost = el('div', 'sticker-ghost');
+    const img = el('img');
+    img.src = sticker.src;
+    ghost.appendChild(img);
+    ghost.style.left = e.clientX + 'px';
+    ghost.style.top = e.clientY + 'px';
+    document.body.appendChild(ghost);
+  });
+
+  btn.addEventListener('pointermove', (e) => {
+    if (e.pointerId !== pointerId || !ghost) return;
+    ghost.style.left = e.clientX + 'px';
+    ghost.style.top = e.clientY + 'px';
+    board.classList.toggle('taking-sticker', overBoard(e));
+  });
+
+  function overBoard(e) {
+    const r = board.getBoundingClientRect();
+    return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+  }
+
+  function drop(e) {
+    if (e.pointerId !== pointerId) return;
+    pointerId = null;
+    board.classList.remove('taking-sticker');
+    if (ghost) {
+      ghost.remove();
+      ghost = null;
+    }
+    if (!overBoard(e)) return;
+
+    const r = board.getBoundingClientRect();
+    const placed = {
+      id: 'st' + newId(),
+      kind: 'sticker',
+      src: sticker.src,
+      board: BOARDS[current].id,
+      x: 50,
+      y: 50,
+      rot: (Math.random() - 0.5) * 14,
+    };
+
+    // put it down first, then centre it on the pointer using its real size —
+    // a sticker renders at 150px times the board's scale, not 150px
+    const node = render(Object.assign({}, placed, { fresh: true }));
+    const live = items.get(placed.id).data;
+    placed.x = ((e.clientX - r.left) / r.width) * 100 - (node.offsetWidth / r.width) * 50;
+    placed.y = ((e.clientY - r.top) / r.height) * 100 - (node.offsetHeight / r.height) * 50;
+    live.x = placed.x;
+    live.y = placed.y;
+    node.style.left = placed.x + '%';
+    node.style.top = placed.y + '%';
+
+    store.stuck.push(placed);
+    store.top = (store.top || 10) + 1;
+    live.z = store.top;
+    node.style.zIndex = store.top;
+    store.positions[placed.id] = { x: placed.x, y: placed.y, z: store.top };
+    save();
+    boardEmpty.hidden = true;
+  }
+
+  btn.addEventListener('pointerup', drop);
+  btn.addEventListener('pointercancel', drop);
+}
+
+renderTray();
