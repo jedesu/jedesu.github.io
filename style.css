@@ -477,6 +477,21 @@ body {
   display: block;
 }
 
+/* a photo being drawn: paper shows until the drawing is ready, then it fades up */
+.polaroid-shot.is-drawing {
+  background: #efe9dc;
+  box-shadow: inset 0 1px 4px rgba(60, 40, 20, 0.16);
+}
+
+.polaroid-shot.is-drawing img {
+  opacity: 0;
+  transition: opacity 0.7s ease;
+}
+
+.polaroid-shot.is-drawing.drawn img {
+  opacity: 1;
+}
+
 /* a polaroid develops: starts blank, the picture creeps in */
 .polaroid-shot.developing::after {
   content: '';

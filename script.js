@@ -227,7 +227,7 @@ const BOARDS = [
   {
     id: 'guestbook',
     name: '// the guestbook',
-    note: 'pin a note or a photo — this one is yours',
+    note: 'pin a note or a photo — photos come out as doodles',
     open: true, // the only board that takes what visitors add
     empty: 'nothing pinned yet —\nbe the first',
     items: [],
@@ -410,11 +410,20 @@ function buildPolaroid(data) {
 
   if (data.src) {
     const img = el('img');
-    img.src = data.src;
     img.alt = data.caption || 'a pinned photo';
     img.draggable = false;
     shot.appendChild(img);
-    if (data.fresh) shot.classList.add('developing');
+    if (DOODLE_PHOTOS && !data.doodled) {
+      // drawn as it's shown: paper sits in the frame until the drawing lands
+      shot.classList.add('is-drawing');
+      img.addEventListener('load', () => shot.classList.add('drawn'), { once: true });
+      doodleSrc(data.src).then((url) => {
+        img.src = url;
+      });
+    } else {
+      img.src = data.src;
+      if (data.fresh) shot.classList.add('developing');
+    }
   } else if (data.empty) {
     shot.classList.add('is-empty');
     shot.appendChild(el('span', 'shot-hint', 'no photo yet'));
@@ -1343,31 +1352,6 @@ document.querySelectorAll('[data-add]').forEach((btn) => {
   });
 });
 
-// Shrink before storing: a phone photo is several MB, and localStorage gives
-// us about 5MB total for everything on the board.
-function downscale(file, max) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = reject;
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = reject;
-      img.onload = () => {
-        const ratio = Math.min(1, max / Math.max(img.width, img.height));
-        const w = Math.round(img.width * ratio);
-        const h = Math.round(img.height * ratio);
-        const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/jpeg', 0.8));
-      };
-      img.src = reader.result;
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
 fileInput.addEventListener('change', async () => {
   const file = fileInput.files && fileInput.files[0];
   fileInput.value = '';
@@ -1376,9 +1360,11 @@ fileInput.addEventListener('change', async () => {
   const photos = store.guests.filter((g) => g.kind === 'polaroid').length;
   if (photos >= MAX_PHOTOS) dropOldestPhoto();
 
+  // drawn once here and stored drawn, so it never has to be redone on display;
+  // jpeg because the paper grain makes png several times the size
   let src;
   try {
-    src = await downscale(file, 760);
+    src = (await doodleFile(file)).toDataURL('image/jpeg', 0.86);
   } catch (e) {
     return;
   }
@@ -1387,6 +1373,7 @@ fileInput.addEventListener('change', async () => {
     id: newId(),
     kind: 'polaroid',
     src: src,
+    doodled: true,
     caption: (file.name || '').replace(/\.[^.]+$/, '').slice(0, 28),
     rot: (Math.random() - 0.5) * 10,
     tape: Math.random() < 0.45,
@@ -1394,29 +1381,332 @@ fileInput.addEventListener('change', async () => {
   });
 });
 
-// ---- go --------------------------------------------------------------------
-window.addEventListener('resize', fit);
-if (narrow.addEventListener) narrow.addEventListener('change', fit);
-setView(view, false);
-
 // ---------------------------------------------------------------------------
-// Stickers
+// Doodles
 //
-// A photo goes in, a cut-out sticker comes out, and it waits in the drawer
-// until someone drags it onto the cork. The cut-out runs on the visitor's own
-// machine — transformers.js with BiRefNet, fetched from a CDN the first time
-// anyone asks for it — so there's no key, no server and no bill, and the photo
-// never leaves their device. If the model won't load we still make a sticker,
-// just uncut rather than cut out.
+// Every photo on the boards comes out looking sketched: pencil lines drawn out
+// of the photo's own detail, over a pale wash of its colours, on cream paper.
+// No model and nothing downloaded — it's plain image processing, so it's free,
+// it works on a phone, and the photo never leaves the device.
+//
+//   1. pencil — the picture colour-dodged against a blurred negative of itself:
+//               flat areas wash out and edges, eyes and hair stay as strokes
+//   2. wash   — its colours smoothed with a bilateral filter, so each stays
+//               inside its own shape, then paled toward the paper
+//   3. paper  — pencil laid over the wash, with a fixed grain so it doesn't
+//               look printed
+//
+// doodleCore has to stay self-contained: it's stringified into a worker, so it
+// can't reach anything outside itself.
 // ---------------------------------------------------------------------------
 
-const TRANSFORMERS = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0/dist/transformers.min.js';
-// Tried in order, lightest first: whichever the visitor's machine can afford.
-// A phone or a low-memory browser will fail to allocate the bigger one and fall
-// through to the plain sticker, which is why makeSticker never depends on this.
-const CUTOUT_MODELS = ['Xenova/modnet', 'onnx-community/BiRefNet_lite-ONNX'];
-const STICKER_PX = 320; // what we keep, before the board scales it
-const MAX_STICKERS = 8; // base64 PNGs are heavy and localStorage is about 5MB
+const DOODLE_PHOTOS = true; // set false to show photos as they are
+const DOODLE_PX = 520; // photos are drawn at this size on their long side
+
+function doodleCore(src, W, H, opts) {
+  opts = opts || {};
+  const N = W * H;
+  const PAPER = [247, 241, 228];
+  const gamma = opts.gamma || 2.1; // how dark the pencil strokes go
+  const lift = opts.lift === undefined ? 0.36 : opts.lift; // how pale the wash is
+
+  // ---- read the photo, flattening any transparency onto paper -----------
+  const R = new Float32Array(N);
+  const G = new Float32Array(N);
+  const B = new Float32Array(N);
+  const Y = new Float32Array(N);
+  for (let i = 0, p = 0; i < N; i++, p += 4) {
+    const a = src[p + 3] / 255;
+    R[i] = src[p] * a + PAPER[0] * (1 - a);
+    G[i] = src[p + 1] * a + PAPER[1] * (1 - a);
+    B[i] = src[p + 2] * a + PAPER[2] * (1 - a);
+    Y[i] = 0.299 * R[i] + 0.587 * G[i] + 0.114 * B[i];
+  }
+
+  function blur(a, sigma, w, h) {
+    const r = Math.ceil(sigma * 3);
+    const k = new Float32Array(r * 2 + 1);
+    let total = 0;
+    for (let i = -r; i <= r; i++) {
+      k[i + r] = Math.exp(-(i * i) / (2 * sigma * sigma));
+      total += k[i + r];
+    }
+    for (let i = 0; i < k.length; i++) k[i] /= total;
+    const tmp = new Float32Array(w * h);
+    const out = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let s = 0;
+        for (let i = -r; i <= r; i++) {
+          const xx = x + i < 0 ? 0 : x + i > w - 1 ? w - 1 : x + i;
+          s += a[y * w + xx] * k[i + r];
+        }
+        tmp[y * w + x] = s;
+      }
+    }
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let s = 0;
+        for (let i = -r; i <= r; i++) {
+          const yy = y + i < 0 ? 0 : y + i > h - 1 ? h - 1 : y + i;
+          s += tmp[yy * w + x] * k[i + r];
+        }
+        out[y * w + x] = s;
+      }
+    }
+    return out;
+  }
+
+  // ---- 1. pencil: colour-dodge the picture against a blurred negative of
+  //         itself. Flat areas wash out to paper and every edge, eyelash and
+  //         strand of hair is left behind as a graphite stroke --------------
+  const grey = blur(Y, 0.7, W, H); // knocks sensor noise out before it becomes scratches
+  const negative = new Float32Array(N);
+  for (let i = 0; i < N; i++) negative[i] = 255 - grey[i];
+  const soft = blur(negative, Math.max(4, W / 70), W, H);
+  const pencil = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    const v = Math.min(255, (grey[i] * 255) / Math.max(1, 255 - soft[i]));
+    pencil[i] = Math.pow(v / 255, gamma);
+  }
+
+  // ---- 2. wash: the photo's colours, smoothed at half size with a bilateral
+  //         filter so each colour stays inside its own shape — lips don't
+  //         bleed onto cheeks the way a plain blur lets them ----------------
+  const w = Math.max(1, Math.ceil(W / 2));
+  const h = Math.max(1, Math.ceil(H / 2));
+  const n = w * h;
+  let r2 = new Float32Array(n);
+  let g2 = new Float32Array(n);
+  let b2 = new Float32Array(n);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let sr = 0;
+      let sg = 0;
+      let sb = 0;
+      let k = 0;
+      for (let dy = 0; dy < 2; dy++) {
+        const yy = y * 2 + dy;
+        if (yy >= H) continue;
+        for (let dx = 0; dx < 2; dx++) {
+          const xx = x * 2 + dx;
+          if (xx >= W) continue;
+          const i = yy * W + xx;
+          sr += R[i];
+          sg += G[i];
+          sb += B[i];
+          k++;
+        }
+      }
+      const j = y * w + x;
+      r2[j] = sr / k;
+      g2[j] = sg / k;
+      b2[j] = sb / k;
+    }
+  }
+
+  const rad = 5;
+  const sigmaS = 3;
+  const sigmaR = 28;
+  const span = rad * 2 + 1;
+  const spatial = new Float32Array(span * span);
+  for (let dy = -rad; dy <= rad; dy++) {
+    for (let dx = -rad; dx <= rad; dx++) {
+      spatial[(dy + rad) * span + dx + rad] = Math.exp(-(dx * dx + dy * dy) / (2 * sigmaS * sigmaS));
+    }
+  }
+  // range weight looked up by squared colour distance, in steps of 16
+  const rangeLUT = new Float32Array(Math.ceil((3 * 255 * 255) / 16) + 2);
+  for (let i = 0; i < rangeLUT.length; i++) rangeLUT[i] = Math.exp(-(i * 16) / (2 * sigmaR * sigmaR));
+
+  for (let pass = 0; pass < 2; pass++) {
+    const nr = new Float32Array(n);
+    const ng = new Float32Array(n);
+    const nb = new Float32Array(n);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const j = y * w + x;
+        const cr = r2[j];
+        const cg = g2[j];
+        const cb = b2[j];
+        let sr = 0;
+        let sg = 0;
+        let sb = 0;
+        let sw = 0;
+        for (let dy = -rad; dy <= rad; dy++) {
+          const yy = y + dy;
+          if (yy < 0 || yy >= h) continue;
+          for (let dx = -rad; dx <= rad; dx++) {
+            const xx = x + dx;
+            if (xx < 0 || xx >= w) continue;
+            const q = yy * w + xx;
+            const er = r2[q] - cr;
+            const eg = g2[q] - cg;
+            const eb = b2[q] - cb;
+            const wt = spatial[(dy + rad) * span + dx + rad] * rangeLUT[((er * er + eg * eg + eb * eb) / 16) | 0];
+            sr += r2[q] * wt;
+            sg += g2[q] * wt;
+            sb += b2[q] * wt;
+            sw += wt;
+          }
+        }
+        nr[j] = sr / sw;
+        ng[j] = sg / sw;
+        nb[j] = sb / sw;
+      }
+    }
+    r2 = nr;
+    g2 = ng;
+    b2 = nb;
+  }
+
+  // ---- 3. wash up to full size, pencil over it, grain over both -----------
+  const out = new Uint8ClampedArray(N * 4);
+  for (let y = 0; y < H; y++) {
+    const fy = Math.min(h - 1, Math.max(0, (y + 0.5) / 2 - 0.5));
+    const y0 = Math.floor(fy);
+    const y1 = Math.min(h - 1, y0 + 1);
+    const ty = fy - y0;
+    for (let x = 0; x < W; x++) {
+      const fx = Math.min(w - 1, Math.max(0, (x + 0.5) / 2 - 0.5));
+      const x0 = Math.floor(fx);
+      const x1 = Math.min(w - 1, x0 + 1);
+      const tx = fx - x0;
+      const a = y0 * w + x0;
+      const b = y0 * w + x1;
+      const c = y1 * w + x0;
+      const d = y1 * w + x1;
+      const wr = (r2[a] * (1 - tx) + r2[b] * tx) * (1 - ty) + (r2[c] * (1 - tx) + r2[d] * tx) * ty;
+      const wg = (g2[a] * (1 - tx) + g2[b] * tx) * (1 - ty) + (g2[c] * (1 - tx) + g2[d] * tx) * ty;
+      const wb = (b2[a] * (1 - tx) + b2[b] * tx) * (1 - ty) + (b2[c] * (1 - tx) + b2[d] * tx) * ty;
+
+      const i = y * W + x;
+      const s = pencil[i];
+      // grain fixed per pixel, so the same photo always draws the same
+      let hsh = Math.imul(x, 73856093) ^ Math.imul(y, 19349663);
+      hsh = Math.imul(hsh ^ (hsh >>> 13), 1274126177);
+      const grain = ((hsh >>> 24) / 255 - 0.5) * 9;
+      const p = i * 4;
+      out[p] = (wr * (1 - lift) + PAPER[0] * lift) * s + grain;
+      out[p + 1] = (wg * (1 - lift) + PAPER[1] * lift) * s + grain;
+      out[p + 2] = (wb * (1 - lift) + PAPER[2] * lift) * s + grain;
+      out[p + 3] = 255;
+    }
+  }
+  return out;
+}
+
+// ---- running it off the main thread ----------------------------------------
+// Drawing a photo takes a few hundred milliseconds of solid arithmetic. Done on
+// the page it would stall the globe and the board transitions, so it runs in a
+// worker built from doodleCore's own source — and on the page as a fallback if
+// a worker can't start.
+let doodler = null; // the worker; false once we know it can't run
+let doodleSeq = 0;
+const doodleJobs = new Map();
+
+function doodleWorker() {
+  if (doodler !== null) return doodler;
+  try {
+    const source =
+      'var doodleCore = ' + doodleCore.toString() + ';\n' +
+      'self.onmessage = function (e) {\n' +
+      '  var d = e.data;\n' +
+      '  var out = doodleCore(d.pixels, d.w, d.h, d.opts);\n' +
+      '  self.postMessage({ id: d.id, out: out }, [out.buffer]);\n' +
+      '};\n';
+    doodler = new Worker(URL.createObjectURL(new Blob([source], { type: 'text/javascript' })));
+    doodler.onmessage = (e) => {
+      const job = doodleJobs.get(e.data.id);
+      if (!job) return;
+      doodleJobs.delete(e.data.id);
+      job.resolve(e.data.out);
+    };
+    doodler.onerror = () => {
+      // the worker died: finish whatever was waiting on it here instead
+      doodler = false;
+      doodleJobs.forEach((job) => job.resolve(doodleCore(job.pixels, job.w, job.h, job.opts)));
+      doodleJobs.clear();
+    };
+  } catch (err) {
+    doodler = false;
+  }
+  return doodler;
+}
+
+function runDoodle(pixels, w, h, opts) {
+  const worker = doodleWorker();
+  if (!worker) return Promise.resolve(doodleCore(pixels, w, h, opts));
+  return new Promise((resolve) => {
+    const id = ++doodleSeq;
+    // the original stays here in case the worker falls over; it gets a copy
+    doodleJobs.set(id, { resolve: resolve, pixels: pixels, w: w, h: h, opts: opts });
+    const copy = new Uint8ClampedArray(pixels);
+    worker.postMessage({ id: id, pixels: copy, w: w, h: h, opts: opts }, [copy.buffer]);
+  });
+}
+
+function drawToCanvas(source, max) {
+  const ratio = Math.min(1, max / Math.max(source.width, source.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(source.width * ratio));
+  canvas.height = Math.max(1, Math.round(source.height * ratio));
+  canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    // lets a photo from another site be drawn when that site allows it; our
+    // own files, uploads and data urls are unaffected
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+async function doodleCanvas(img, max) {
+  const canvas = drawToCanvas(img, max || DOODLE_PX);
+  const ctx = canvas.getContext('2d');
+  const shot = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const out = await runDoodle(shot.data, canvas.width, canvas.height, {});
+  ctx.putImageData(new ImageData(out, canvas.width, canvas.height), 0, 0);
+  return canvas;
+}
+
+async function doodleFile(file, max) {
+  const url = URL.createObjectURL(file);
+  try {
+    return await doodleCanvas(await loadImage(url), max);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+// Photos pinned up by path — the trip photos — are drawn as they're shown, and
+// only once each per visit. If one can't be read (a photo from another site
+// without CORS), the original shows instead.
+const doodled = new Map();
+function doodleSrc(src) {
+  if (!doodled.has(src)) {
+    doodled.set(
+      src,
+      loadImage(src)
+        .then((img) => doodleCanvas(img))
+        .then((canvas) => canvas.toDataURL('image/jpeg', 0.88))
+        .catch(() => src)
+    );
+  }
+  return doodled.get(src);
+}
+
+// ---- stickers --------------------------------------------------------------
+// A photo goes in, comes out drawn and framed like a sticker, and waits in the
+// drawer until someone drags it onto a board.
+const STICKER_PX = 300; // what we keep, before the board scales it
+const MAX_STICKERS = 8; // localStorage is about 5MB for everything
 
 const tray = document.getElementById('tray');
 const trayEmpty = document.getElementById('tray-empty');
@@ -1429,180 +1719,41 @@ function say(text, warn) {
   drawerNote.classList.toggle('warn', !!warn);
 }
 
-// ---- the cut-out ----------------------------------------------------------
-let cutterPromise = null;
-
-function getCutter() {
-  if (!cutterPromise) {
-    cutterPromise = (async () => {
-      const tf = await import(TRANSFORMERS);
-      tf.env.allowLocalModels = false;
-      let last = null;
-      for (const model of CUTOUT_MODELS) {
-        try {
-          return await tf.pipeline('background-removal', model);
-        } catch (err) {
-          last = err; // usually out of memory; try something smaller
-        }
-      }
-      throw last || new Error('no cutout model would load');
-    })().catch((err) => {
-      cutterPromise = null; // let them try again later
-      throw err;
-    });
-  }
-  return cutterPromise;
+function roundedRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }
 
-// The pipeline hands back a RawImage, whose helpers differ between versions —
-// take whichever way out it offers rather than assuming one.
-async function toCanvasAny(raw, max) {
-  if (raw && typeof raw.toCanvas === 'function') return drawToCanvas(raw.toCanvas(), max);
-  if (raw && typeof raw.toDataURL === 'function') return drawToCanvas(await loadImage(raw.toDataURL()), max);
-  if (raw && typeof raw.toBlob === 'function') {
-    const url = URL.createObjectURL(await raw.toBlob());
-    const canvas = drawToCanvas(await loadImage(url), max);
-    URL.revokeObjectURL(url);
-    return canvas;
-  }
-  // last resort: paint the pixel buffer ourselves
-  if (raw && raw.data && raw.width && raw.height) {
-    const channels = raw.channels || 4;
-    const canvas = document.createElement('canvas');
-    canvas.width = raw.width;
-    canvas.height = raw.height;
-    const shot = canvas.getContext('2d').createImageData(raw.width, raw.height);
-    for (let i = 0, p = 0; p < shot.data.length; i += channels, p += 4) {
-      shot.data[p] = raw.data[i];
-      shot.data[p + 1] = raw.data[i + (channels > 2 ? 1 : 0)];
-      shot.data[p + 2] = raw.data[i + (channels > 2 ? 2 : 0)];
-      shot.data[p + 3] = channels === 4 ? raw.data[i + 3] : 255;
-    }
-    canvas.getContext('2d').putImageData(shot, 0, 0);
-    return drawToCanvas(canvas, max);
-  }
-  throw new Error('the cutout came back in a shape we do not know');
-}
-
-function drawToCanvas(source, max) {
-  const ratio = Math.min(1, max / Math.max(source.width, source.height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(source.width * ratio);
-  canvas.height = Math.round(source.height * ratio);
-  canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
-  return canvas;
-}
-
-function loadImage(src) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
-  });
-}
-
-// ---- the sticker look -----------------------------------------------------
-// Flatten the colours a little so it reads as drawn rather than photographed,
-// then lay a fat white border under the whole silhouette.
-function posterise(canvas, steps) {
-  const ctx = canvas.getContext('2d');
-  const px = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const d = px.data;
-  const band = 255 / (steps - 1);
-  for (let i = 0; i < d.length; i += 4) {
-    if (d[i + 3] < 8) continue;
-    d[i] = Math.round(d[i] / band) * band;
-    d[i + 1] = Math.round(d[i + 1] / band) * band;
-    d[i + 2] = Math.round(d[i + 2] / band) * band;
-  }
-  ctx.putImageData(px, 0, 0);
-}
-
-function addBorder(art, width) {
-  const pad = Math.ceil(width) + 2;
+// a thick white border with soft corners, the drawing clipped inside it
+function stickerFrame(art) {
+  const pad = Math.round(Math.max(art.width, art.height) * 0.055);
   const out = document.createElement('canvas');
   out.width = art.width + pad * 2;
   out.height = art.height + pad * 2;
   const ctx = out.getContext('2d');
-
-  // a solid white copy of the shape
-  const shape = document.createElement('canvas');
-  shape.width = art.width;
-  shape.height = art.height;
-  const sctx = shape.getContext('2d');
-  sctx.drawImage(art, 0, 0);
-  sctx.globalCompositeOperation = 'source-in';
-  sctx.fillStyle = '#fffdf8';
-  sctx.fillRect(0, 0, shape.width, shape.height);
-
-  // stamp it all the way round to fatten the outline
-  for (let a = 0; a < 32; a++) {
-    const t = (a / 32) * Math.PI * 2;
-    ctx.drawImage(shape, pad + Math.cos(t) * width, pad + Math.sin(t) * width);
-  }
+  roundedRect(ctx, 0, 0, out.width, out.height, pad * 1.7);
+  ctx.fillStyle = '#fffdf8';
+  ctx.fill();
+  ctx.save();
+  roundedRect(ctx, pad, pad, art.width, art.height, pad * 0.9);
+  ctx.clip();
   ctx.drawImage(art, pad, pad);
-  return out;
-}
-
-// crops away the transparent margin the model usually leaves behind
-function trim(canvas) {
-  const ctx = canvas.getContext('2d');
-  const shot = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const data = shot.data;
-  const width = canvas.width;
-  const height = canvas.height;
-  let top = height;
-  let left = width;
-  let right = -1;
-  let bottom = -1;
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      if (data[(y * width + x) * 4 + 3] > 12) {
-        if (x < left) left = x;
-        if (x > right) right = x;
-        if (y < top) top = y;
-        if (y > bottom) bottom = y;
-      }
-    }
-  }
-
-  if (right < 0) return canvas; // nothing survived, keep what we had
-  const out = document.createElement('canvas');
-  out.width = right - left + 1;
-  out.height = bottom - top + 1;
-  out.getContext('2d').drawImage(canvas, -left, -top);
+  ctx.restore();
   return out;
 }
 
 async function makeSticker(file) {
-  const url = URL.createObjectURL(file);
-  const plate = drawToCanvas(await loadImage(url), STICKER_PX);
-  URL.revokeObjectURL(url);
-
-  let art = plate;
-  let cutOut = false;
-  try {
-    say('reading the photo — the first one downloads the model, so give it a moment');
-    const cutter = await getCutter();
-    const result = await cutter(plate.toDataURL('image/png'));
-    const raw = Array.isArray(result) ? result[0] : result;
-    art = trim(await toCanvasAny(raw, STICKER_PX));
-    cutOut = true;
-  } catch (err) {
-    // out of memory, no network for the model, or the pipeline moved on
-    say(
-      "couldn't cut the background out on this device — here's the whole photo " +
-        'as a sticker instead',
-      true
-    );
-  }
-
-  posterise(art, 6);
-  const framed = addBorder(art, Math.max(4, art.width * 0.035));
-  if (cutOut) say('');
-  return framed.toDataURL('image/png');
+  say('drawing it…');
+  const framed = stickerFrame(await doodleFile(file, STICKER_PX));
+  say('');
+  // webp keeps the rounded corners and is far smaller than png; browsers that
+  // can't write it hand back a png instead
+  return framed.toDataURL('image/webp', 0.9);
 }
 
 // ---- the drawer -----------------------------------------------------------
@@ -1724,3 +1875,8 @@ function carry(btn, sticker) {
 }
 
 renderTray();
+
+// ---- go --------------------------------------------------------------------
+window.addEventListener('resize', fit);
+if (narrow.addEventListener) narrow.addEventListener('change', fit);
+setView(view, false);
