@@ -1222,6 +1222,57 @@ body {
   object-fit: contain;
 }
 
+/* hovering over the bin: the sticker shrinks toward it */
+.sticker-ghost.binning {
+  transform: rotate(8deg) scale(0.6);
+  opacity: 0.75;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+/* the bin itself, floating at the foot of the window while a sticker is held */
+.bin {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  z-index: 1150;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px 12px 16px;
+  border-radius: 999px;
+  background: #2b2522;
+  color: #f4efe6;
+  font-size: 12px;
+  box-shadow: 0 10px 28px rgba(30, 20, 12, 0.35);
+  transform: translateX(-50%);
+  animation: bin-up 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
+  pointer-events: none;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.bin[hidden] {
+  display: none;
+}
+
+@keyframes bin-up {
+  from { opacity: 0; transform: translate(-50%, 16px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.bin.hot {
+  background: #b03a3a;
+  transform: translateX(-50%) scale(1.08);
+}
+
+.bin-lid {
+  transform-origin: 20px 6px;
+  transition: transform 0.15s ease;
+}
+
+.bin.hot .bin-lid {
+  transform: rotate(18deg) translate(1px, -2px);
+}
+
 /* the cork lights up while you're carrying one over it */
 .board.taking-sticker {
   box-shadow:
@@ -1245,8 +1296,54 @@ body {
 
 /* a sticker stuck on the board — no pin, they stick by themselves */
 .sticker-art {
+  position: relative;
   width: calc(150px * var(--scale));
   height: calc(150px * var(--scale));
+}
+
+/* its × — shows on hover or focus, and always on a touchscreen */
+.peel {
+  position: absolute;
+  top: calc(-6px * var(--scale));
+  right: calc(-6px * var(--scale));
+  z-index: 2;
+  width: calc(24px * var(--scale));
+  height: calc(24px * var(--scale));
+  min-width: 20px;
+  min-height: 20px;
+  padding: 0;
+  border: 2px solid #fffdf8;
+  border-radius: 50%;
+  background: #2b2522;
+  color: #fffdf8;
+  font: 600 calc(14px * var(--scale)) / 1 'JetBrains Mono', monospace;
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.8);
+  transition: opacity 0.15s ease, transform 0.15s ease, background 0.15s ease;
+  box-shadow: 0 2px 5px rgba(40, 25, 15, 0.35);
+}
+
+.item:hover .peel,
+.item:focus-within .peel,
+.peel:focus-visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.peel:hover {
+  background: var(--accent);
+}
+
+@media (hover: none) {
+  .peel {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.item.dragging .peel {
+  opacity: 0;
 }
 
 .sticker-art img {

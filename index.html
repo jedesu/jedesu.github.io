@@ -178,6 +178,16 @@
 <div class="zoom-backdrop" id="zoom-backdrop" hidden></div>
 <button type="button" class="zoom-close" id="zoom-close" hidden aria-label="close">esc</button>
 
+<!-- the bin that comes up while a sticker from the drawer is being held -->
+<div class="bin" id="bin" hidden aria-hidden="true">
+  <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor"
+       stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path class="bin-lid" d="M3 6h18M9 6V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V6"/>
+    <path d="M5.5 6l1 13.2A2 2 0 0 0 8.5 21h7a2 2 0 0 0 2-1.8L18.5 6M10 10.5v6M14 10.5v6"/>
+  </svg>
+  <span>drop here to throw away</span>
+</div>
+
 <input type="file" id="file-input" accept="image/*" hidden>
 <input type="file" id="sticker-input" accept="image/*" hidden>
 

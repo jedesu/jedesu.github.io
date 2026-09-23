@@ -878,6 +878,17 @@ function buildSticker(data) {
   img.alt = 'a sticker someone stuck on the board';
   img.draggable = false;
   node.appendChild(img);
+
+  // peel it back off; it lives on the art, not the item, so it sits in the
+  // right place whether the board is laid out or stacked
+  const x = el('button', 'peel', '\u00d7');
+  x.type = 'button';
+  x.setAttribute('aria-label', 'remove this sticker');
+  x.addEventListener('click', (e) => {
+    e.stopPropagation();
+    peel(data.id);
+  });
+  node.appendChild(x);
   return node;
 }
 
@@ -1049,6 +1060,8 @@ function attach(node, live) {
     if (zoomedId && zoomedId !== live.id) return;
     // ...and a link inside the open card belongs to the link, not to us
     if (zoomedId === live.id && e.target.closest('a')) return;
+    // the × on a sticker is its own button, not a handle
+    if (e.target.closest('.peel')) return;
     if (e.button && e.button !== 0) return;
     pointerId = e.pointerId;
     // capture can refuse a pointer that's already gone; the drag still works
@@ -1105,6 +1118,7 @@ function attach(node, live) {
   node.addEventListener('pointercancel', release);
 
   node.addEventListener('keydown', (e) => {
+    if (e.target !== node) return; // a button inside the item handles its own keys
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       if (zoomedId === live.id) zoomOut();
@@ -1384,43 +1398,57 @@ fileInput.addEventListener('change', async () => {
 // ---------------------------------------------------------------------------
 // Doodles
 //
-// Every photo on the boards comes out looking sketched: pencil lines drawn out
-// of the photo's own detail, over a pale wash of its colours, on cream paper.
-// No model and nothing downloaded — it's plain image processing, so it's free,
+// Every photo on the boards is redrawn as an illustration: simplified into a
+// handful of bold, flat marker colours, outlined in ink where one thing meets
+// another, hatched in the shadows, with the photo's own fine lines — eyes,
+// hair, a paddle — drawn back in so it stays recognisably the same picture.
+// No model and nothing downloaded: it's plain image processing, so it's free,
 // it works on a phone, and the photo never leaves the device.
 //
-//   1. pencil — the picture colour-dodged against a blurred negative of itself:
-//               flat areas wash out and edges, eyes and hair stay as strokes
-//   2. wash   — its colours smoothed with a bilateral filter, so each stays
-//               inside its own shape, then paled toward the paper
-//   3. paper  — pencil laid over the wash, with a fixed grain so it doesn't
-//               look printed
+//   1. simplify  — shrink, bilateral-smooth, and cut into ~10 colours, one of
+//                  them kept for the brightest accent; specks are swallowed
+//   2. colour    — each colour pushed to marker saturation and contrast
+//   3. shapes    — brought back up as soft masks with a hand wobble, so edges
+//                  are smooth curves rather than pixel steps
+//   4. ink       — outlines only between clearly different colours (objects,
+//                  not every step of shading), plus the photo's strongest
+//                  detail lines, plus hatching where it's dark
 //
 // doodleCore has to stay self-contained: it's stringified into a worker, so it
 // can't reach anything outside itself.
 // ---------------------------------------------------------------------------
 
 const DOODLE_PHOTOS = true; // set false to show photos as they are
-const DOODLE_PX = 520; // photos are drawn at this size on their long side
+const DOODLE_PX = 560; // photos are drawn at this size on their long side
 
 function doodleCore(src, W, H, opts) {
   opts = opts || {};
+  const K = opts.colours || 10;
   const N = W * H;
-  const PAPER = [247, 241, 228];
-  const gamma = opts.gamma || 2.1; // how dark the pencil strokes go
-  const lift = opts.lift === undefined ? 0.36 : opts.lift; // how pale the wash is
+  const PAPER = [248, 243, 231];
+  const INK = [34, 29, 27];
 
-  // ---- read the photo, flattening any transparency onto paper -----------
-  const R = new Float32Array(N);
-  const G = new Float32Array(N);
-  const B = new Float32Array(N);
-  const Y = new Float32Array(N);
-  for (let i = 0, p = 0; i < N; i++, p += 4) {
-    const a = src[p + 3] / 255;
-    R[i] = src[p] * a + PAPER[0] * (1 - a);
-    G[i] = src[p + 1] * a + PAPER[1] * (1 - a);
-    B[i] = src[p + 2] * a + PAPER[2] * (1 - a);
-    Y[i] = 0.299 * R[i] + 0.587 * G[i] + 0.114 * B[i];
+  function hash(x, y) {
+    let h = Math.imul(x, 73856093) ^ Math.imul(y, 19349663);
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+  }
+
+  // smooth value noise, used to make lines and hatching wobble like a hand
+  const cell = 34;
+  function noise(x, y, seed) {
+    const gx = x / cell;
+    const gy = y / cell;
+    const x0 = Math.floor(gx);
+    const y0 = Math.floor(gy);
+    const tx = gx - x0;
+    const ty = gy - y0;
+    const sx = tx * tx * (3 - 2 * tx);
+    const sy = ty * ty * (3 - 2 * ty);
+    const v = (a, c) => hash(a + seed * 101, c + seed * 57);
+    const top = v(x0, y0) * (1 - sx) + v(x0 + 1, y0) * sx;
+    const bottom = v(x0, y0 + 1) * (1 - sx) + v(x0 + 1, y0 + 1) * sx;
+    return top * (1 - sy) + bottom * sy - 0.5;
   }
 
   function blur(a, sigma, w, h) {
@@ -1457,82 +1485,55 @@ function doodleCore(src, W, H, opts) {
     return out;
   }
 
-  // ---- 1. pencil: colour-dodge the picture against a blurred negative of
-  //         itself. Flat areas wash out to paper and every edge, eyelash and
-  //         strand of hair is left behind as a graphite stroke --------------
-  const grey = blur(Y, 0.7, W, H); // knocks sensor noise out before it becomes scratches
-  const negative = new Float32Array(N);
-  for (let i = 0; i < N; i++) negative[i] = 255 - grey[i];
-  const soft = blur(negative, Math.max(4, W / 70), W, H);
-  const pencil = new Float32Array(N);
-  for (let i = 0; i < N; i++) {
-    const v = Math.min(255, (grey[i] * 255) / Math.max(1, 255 - soft[i]));
-    pencil[i] = Math.pow(v / 255, gamma);
-  }
-
-  // ---- 2. wash: the photo's colours, smoothed at half size with a bilateral
-  //         filter so each colour stays inside its own shape — lips don't
-  //         bleed onto cheeks the way a plain blur lets them ----------------
-  const w = Math.max(1, Math.ceil(W / 2));
-  const h = Math.max(1, Math.ceil(H / 2));
+  // ---- 1. look at the photo small, so the shapes it's cut into stay simple -
+  const f = Math.max(1, Math.round(Math.max(W, H) / (opts.detail || 230)));
+  const w = Math.ceil(W / f);
+  const h = Math.ceil(H / f);
   const n = w * h;
-  let r2 = new Float32Array(n);
-  let g2 = new Float32Array(n);
-  let b2 = new Float32Array(n);
+  let r = new Float32Array(n);
+  let g = new Float32Array(n);
+  let b = new Float32Array(n);
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       let sr = 0;
       let sg = 0;
       let sb = 0;
-      let k = 0;
-      for (let dy = 0; dy < 2; dy++) {
-        const yy = y * 2 + dy;
-        if (yy >= H) continue;
-        for (let dx = 0; dx < 2; dx++) {
-          const xx = x * 2 + dx;
-          if (xx >= W) continue;
-          const i = yy * W + xx;
-          sr += R[i];
-          sg += G[i];
-          sb += B[i];
-          k++;
+      let c = 0;
+      for (let dy = 0; dy < f; dy++) {
+        for (let dx = 0; dx < f; dx++) {
+          const yy = y * f + dy;
+          const xx = x * f + dx;
+          if (yy >= H || xx >= W) continue;
+          const p = (yy * W + xx) * 4;
+          const a = src[p + 3] / 255; // transparency lands on paper
+          sr += src[p] * a + PAPER[0] * (1 - a);
+          sg += src[p + 1] * a + PAPER[1] * (1 - a);
+          sb += src[p + 2] * a + PAPER[2] * (1 - a);
+          c++;
         }
       }
       const j = y * w + x;
-      r2[j] = sr / k;
-      g2[j] = sg / k;
-      b2[j] = sb / k;
+      r[j] = sr / c;
+      g[j] = sg / c;
+      b[j] = sb / c;
     }
   }
 
-  const rad = 5;
-  const sigmaS = 3;
-  const sigmaR = 28;
-  const span = rad * 2 + 1;
-  const spatial = new Float32Array(span * span);
-  for (let dy = -rad; dy <= rad; dy++) {
-    for (let dx = -rad; dx <= rad; dx++) {
-      spatial[(dy + rad) * span + dx + rad] = Math.exp(-(dx * dx + dy * dy) / (2 * sigmaS * sigmaS));
-    }
-  }
-  // range weight looked up by squared colour distance, in steps of 16
-  const rangeLUT = new Float32Array(Math.ceil((3 * 255 * 255) / 16) + 2);
-  for (let i = 0; i < rangeLUT.length; i++) rangeLUT[i] = Math.exp(-(i * 16) / (2 * sigmaR * sigmaR));
-
-  for (let pass = 0; pass < 2; pass++) {
+  // ---- 2. bilateral smoothing flattens texture inside each shape ----------
+  const rad = 3;
+  const sS = 2;
+  const sR = 24;
+  for (let pass = 0; pass < 3; pass++) {
     const nr = new Float32Array(n);
     const ng = new Float32Array(n);
     const nb = new Float32Array(n);
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         const j = y * w + x;
-        const cr = r2[j];
-        const cg = g2[j];
-        const cb = b2[j];
-        let sr = 0;
-        let sg = 0;
-        let sb = 0;
-        let sw = 0;
+        let a = 0;
+        let br = 0;
+        let bg = 0;
+        let bb = 0;
         for (let dy = -rad; dy <= rad; dy++) {
           const yy = y + dy;
           if (yy < 0 || yy >= h) continue;
@@ -1540,56 +1541,314 @@ function doodleCore(src, W, H, opts) {
             const xx = x + dx;
             if (xx < 0 || xx >= w) continue;
             const q = yy * w + xx;
-            const er = r2[q] - cr;
-            const eg = g2[q] - cg;
-            const eb = b2[q] - cb;
-            const wt = spatial[(dy + rad) * span + dx + rad] * rangeLUT[((er * er + eg * eg + eb * eb) / 16) | 0];
-            sr += r2[q] * wt;
-            sg += g2[q] * wt;
-            sb += b2[q] * wt;
-            sw += wt;
+            const er = r[q] - r[j];
+            const eg = g[q] - g[j];
+            const eb = b[q] - b[j];
+            const wt = Math.exp(-(dx * dx + dy * dy) / (2 * sS * sS) - (er * er + eg * eg + eb * eb) / (2 * sR * sR));
+            a += wt;
+            br += r[q] * wt;
+            bg += g[q] * wt;
+            bb += b[q] * wt;
           }
         }
-        nr[j] = sr / sw;
-        ng[j] = sg / sw;
-        nb[j] = sb / sw;
+        nr[j] = br / a;
+        ng[j] = bg / a;
+        nb[j] = bb / a;
       }
     }
-    r2 = nr;
-    g2 = ng;
-    b2 = nb;
+    r = nr;
+    g = ng;
+    b = nb;
   }
 
-  // ---- 3. wash up to full size, pencil over it, grain over both -----------
+  // ---- 3. cut it into a few flat colours -----------------------------------
+  const idx = [];
+  const every = Math.max(1, Math.floor(n / 4000));
+  for (let i = 0; i < n; i += every) idx.push(i);
+  const lum = (i) => 0.299 * r[i] + 0.587 * g[i] + 0.114 * b[i];
+  idx.sort((a, c) => lum(a) - lum(c));
+  const C = new Float32Array(K * 3);
+  // all but one colour seeded evenly through the brightness range...
+  for (let k = 0; k < K - 1; k++) {
+    const s = idx[Math.floor(((k + 0.5) / (K - 1)) * idx.length)];
+    C[k * 3] = r[s];
+    C[k * 3 + 1] = g[s];
+    C[k * 3 + 2] = b[s];
+  }
+  // ...and the last on the most saturated thing in the picture, so a small
+  // bright accent — red lips, a red jacket — keeps a colour of its own
+  let vivid = idx[0];
+  let vividC = -1;
+  for (const i of idx) {
+    const c = Math.max(r[i], g[i], b[i]) - Math.min(r[i], g[i], b[i]);
+    if (c > vividC) {
+      vividC = c;
+      vivid = i;
+    }
+  }
+  C[(K - 1) * 3] = r[vivid];
+  C[(K - 1) * 3 + 1] = g[vivid];
+  C[(K - 1) * 3 + 2] = b[vivid];
+
+  function nearest(rr, gg, bb) {
+    let best = 0;
+    let bd = Infinity;
+    for (let k = 0; k < K; k++) {
+      const d1 = rr - C[k * 3];
+      const d2 = gg - C[k * 3 + 1];
+      const d3 = bb - C[k * 3 + 2];
+      const d = 2 * d1 * d1 + 4 * d2 * d2 + 3 * d3 * d3;
+      if (d < bd) {
+        bd = d;
+        best = k;
+      }
+    }
+    return best;
+  }
+  for (let it = 0; it < 12; it++) {
+    const s = new Float64Array(K * 4);
+    for (const i of idx) {
+      const k = nearest(r[i], g[i], b[i]);
+      s[k * 4] += r[i];
+      s[k * 4 + 1] += g[i];
+      s[k * 4 + 2] += b[i];
+      s[k * 4 + 3]++;
+    }
+    for (let k = 0; k < K; k++) {
+      if (!s[k * 4 + 3]) continue;
+      C[k * 3] = s[k * 4] / s[k * 4 + 3];
+      C[k * 3 + 1] = s[k * 4 + 1] / s[k * 4 + 3];
+      C[k * 3 + 2] = s[k * 4 + 2] / s[k * 4 + 3];
+    }
+  }
+  let lab = new Uint8Array(n);
+  for (let j = 0; j < n; j++) lab[j] = nearest(r[j], g[j], b[j]);
+
+  // two rounds of 3x3 majority vote clean the edges of each shape
+  for (let pass = 0; pass < 2; pass++) {
+    const out = new Uint8Array(n);
+    const t = new Uint16Array(K);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        t.fill(0);
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const yy = y + dy;
+            const xx = x + dx;
+            if (yy >= 0 && yy < h && xx >= 0 && xx < w) t[lab[yy * w + xx]]++;
+          }
+        }
+        let p = lab[y * w + x];
+        for (let k = 0; k < K; k++) if (t[k] > t[p]) p = k;
+        out[y * w + x] = p;
+      }
+    }
+    lab = out;
+  }
+
+  // any patch smaller than a speck joins its most common neighbour
+  const minArea = Math.max(6, Math.round(n * (opts.speck || 0.0012)));
+  const seen = new Uint8Array(n);
+  const around = (j) => {
+    const x = j % w;
+    const y = (j / w) | 0;
+    const out = [];
+    if (x + 1 < w) out.push(j + 1);
+    if (x > 0) out.push(j - 1);
+    if (y + 1 < h) out.push(j + w);
+    if (y > 0) out.push(j - w);
+    return out;
+  };
+  for (let s0 = 0; s0 < n; s0++) {
+    if (seen[s0]) continue;
+    const stack = [s0];
+    const cells = [];
+    seen[s0] = 1;
+    while (stack.length) {
+      const j = stack.pop();
+      cells.push(j);
+      for (const q of around(j)) {
+        if (!seen[q] && lab[q] === lab[j]) {
+          seen[q] = 1;
+          stack.push(q);
+        }
+      }
+    }
+    if (cells.length >= minArea) continue;
+    const t = new Uint32Array(K);
+    for (const j of cells) for (const q of around(j)) if (lab[q] !== lab[j]) t[lab[q]]++;
+    let best = lab[s0];
+    let bc = 0;
+    for (let k = 0; k < K; k++) {
+      if (t[k] > bc) {
+        bc = t[k];
+        best = k;
+      }
+    }
+    for (const j of cells) lab[j] = best;
+  }
+
+  // ---- 4. stronger colours: push saturation and contrast like marker ink ---
+  const F = new Float32Array(K * 3);
+  const light = new Float32Array(K);
+  for (let k = 0; k < K; k++) {
+    const R = C[k * 3] / 255;
+    const G = C[k * 3 + 1] / 255;
+    const B = C[k * 3 + 2] / 255;
+    const mx = Math.max(R, G, B);
+    const mn = Math.min(R, G, B);
+    let L = (mx + mn) / 2;
+    let S = 0;
+    let hue = 0;
+    if (mx !== mn) {
+      const d = mx - mn;
+      S = L > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+      hue = mx === R ? (G - B) / d + (G < B ? 6 : 0) : mx === G ? (B - R) / d + 2 : (R - G) / d + 4;
+      hue /= 6;
+    }
+    S = Math.min(1, S * (opts.saturation || 1.55) + 0.06);
+    L = Math.min(0.92, Math.max(0.16, 0.5 + (L - 0.5) * (opts.contrast || 1.15) + 0.03));
+    light[k] = L;
+    const q = L < 0.5 ? L * (1 + S) : L + S - L * S;
+    const p = 2 * L - q;
+    const ch = (t) => {
+      t = (t + 1) % 1;
+      if (t < 1 / 6) return p + (q - p) * 6 * t;
+      if (t < 1 / 2) return q;
+      if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+      return p;
+    };
+    F[k * 3] = ch(hue + 1 / 3) * 255;
+    F[k * 3 + 1] = ch(hue) * 255;
+    F[k * 3 + 2] = ch(hue - 1 / 3) * 255;
+  }
+
+  // ---- 5. bring the shapes back up to full size with smooth, hand-wobbled
+  //         edges: each colour is a soft mask, and the biggest one wins -------
+  const masks = [];
+  const kern = [0.25, 0.5, 0.25];
+  for (let k = 0; k < K; k++) {
+    const m = new Float32Array(n);
+    for (let j = 0; j < n; j++) m[j] = lab[j] === k ? 1 : 0;
+    const tmp = new Float32Array(n);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let s = 0;
+        for (let i = -1; i <= 1; i++) s += m[y * w + Math.min(w - 1, Math.max(0, x + i))] * kern[i + 1];
+        tmp[y * w + x] = s;
+      }
+    }
+    const soft = new Float32Array(n);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let s = 0;
+        for (let i = -1; i <= 1; i++) s += tmp[Math.min(h - 1, Math.max(0, y + i)) * w + x] * kern[i + 1];
+        soft[y * w + x] = s;
+      }
+    }
+    masks.push(soft);
+  }
+  const wobble = opts.wobble === undefined ? 3 : opts.wobble;
+  const L = new Uint8Array(N);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const ux = x + noise(x, y, 1) * wobble;
+      const uy = y + noise(x, y, 2) * wobble;
+      const fx = Math.min(w - 1, Math.max(0, (ux + 0.5) / f - 0.5));
+      const fy = Math.min(h - 1, Math.max(0, (uy + 0.5) / f - 0.5));
+      const x0 = Math.floor(fx);
+      const y0 = Math.floor(fy);
+      const x1 = Math.min(w - 1, x0 + 1);
+      const y1 = Math.min(h - 1, y0 + 1);
+      const tx = fx - x0;
+      const ty = fy - y0;
+      let best = 0;
+      let bv = -1;
+      for (let k = 0; k < K; k++) {
+        const m = masks[k];
+        const v =
+          (m[y0 * w + x0] * (1 - tx) + m[y0 * w + x1] * tx) * (1 - ty) +
+          (m[y1 * w + x0] * (1 - tx) + m[y1 * w + x1] * tx) * ty;
+        if (v > bv) {
+          bv = v;
+          best = k;
+        }
+      }
+      L[y * W + x] = best;
+    }
+  }
+
+  // ---- 6. outlines, but only between clearly different colours: artists
+  //         outline objects, not every step of shading on a cheek -----------
+  const edgeT = (opts.edge || 85) * (opts.edge || 85);
+  const apart = (a, c) => {
+    const d1 = F[a * 3] - F[c * 3];
+    const d2 = F[a * 3 + 1] - F[c * 3 + 1];
+    const d3 = F[a * 3 + 2] - F[c * 3 + 2];
+    return d1 * d1 + d2 * d2 + d3 * d3 > edgeT;
+  };
+  const edge = new Float32Array(N);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = y * W + x;
+      const l = L[i];
+      if ((x + 1 < W && L[i + 1] !== l && apart(l, L[i + 1])) || (y + 1 < H && L[i + W] !== l && apart(l, L[i + W]))) {
+        edge[i] = 1;
+      }
+    }
+  }
+  const pen = blur(edge, opts.pen || 1.3, W, H);
+  const outline = new Float32Array(N);
+  for (let i = 0; i < N; i++) outline[i] = Math.min(1, Math.max(0, (pen[i] - 0.12) * 4.2));
+
+  // ---- 7. detail lines from the photo itself — eyes, lips, hair, a paddle —
+  //         so it stays recognisably the same picture -----------------------
+  const grey = new Float32Array(N);
+  for (let i = 0, p = 0; i < N; i++, p += 4) grey[i] = 0.299 * src[p] + 0.587 * src[p + 1] + 0.114 * src[p + 2];
+  const s1 = opts.line || 1.2;
+  const near = blur(grey, s1, W, H);
+  const far = blur(grey, s1 * 1.6, W, H);
+  const eps = opts.eps === undefined ? -0.006 : opts.eps;
+  const detail = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    const d = (near[i] - 0.985 * far[i]) / 255;
+    const e = d >= eps ? 1 : 1 + Math.tanh(110 * (d - eps));
+    detail[i] = Math.min(1, (1 - Math.max(0, e)) * 0.9);
+  }
+
+  // ---- 8. put it together: flat marker fill, hatching in the shadows, ink --
   const out = new Uint8ClampedArray(N * 4);
   for (let y = 0; y < H; y++) {
-    const fy = Math.min(h - 1, Math.max(0, (y + 0.5) / 2 - 0.5));
-    const y0 = Math.floor(fy);
-    const y1 = Math.min(h - 1, y0 + 1);
-    const ty = fy - y0;
     for (let x = 0; x < W; x++) {
-      const fx = Math.min(w - 1, Math.max(0, (x + 0.5) / 2 - 0.5));
-      const x0 = Math.floor(fx);
-      const x1 = Math.min(w - 1, x0 + 1);
-      const tx = fx - x0;
-      const a = y0 * w + x0;
-      const b = y0 * w + x1;
-      const c = y1 * w + x0;
-      const d = y1 * w + x1;
-      const wr = (r2[a] * (1 - tx) + r2[b] * tx) * (1 - ty) + (r2[c] * (1 - tx) + r2[d] * tx) * ty;
-      const wg = (g2[a] * (1 - tx) + g2[b] * tx) * (1 - ty) + (g2[c] * (1 - tx) + g2[d] * tx) * ty;
-      const wb = (b2[a] * (1 - tx) + b2[b] * tx) * (1 - ty) + (b2[c] * (1 - tx) + b2[d] * tx) * ty;
-
       const i = y * W + x;
-      const s = pencil[i];
-      // grain fixed per pixel, so the same photo always draws the same
-      let hsh = Math.imul(x, 73856093) ^ Math.imul(y, 19349663);
-      hsh = Math.imul(hsh ^ (hsh >>> 13), 1274126177);
-      const grain = ((hsh >>> 24) / 255 - 0.5) * 9;
+      const k = L[i];
+      // faint diagonal streaks inside each fill, the way a marker drags
+      const streak = 1 - 0.06 * (0.5 + 0.5 * Math.sin((x * 0.9 + y * 0.35) * 0.55 + noise(x, y, 3) * 6));
+      let cr = F[k * 3] * streak;
+      let cg = F[k * 3 + 1] * streak;
+      let cb = F[k * 3 + 2] * streak;
+
+      const lv = light[k];
+      if (lv < 0.3) {
+        const wx = x + noise(x, y, 4) * 3;
+        const wy = y + noise(x, y, 5) * 3;
+        let hatch = Math.abs((((wx + wy) % 7) + 7) % 7 - 3.5) > 3 ? 0.35 : 0;
+        if (lv < 0.2 && Math.abs((((wx - wy) % 8) + 8) % 8 - 4) > 3.4) hatch = 0.35;
+        cr = cr * (1 - hatch) + INK[0] * hatch;
+        cg = cg * (1 - hatch) + INK[1] * hatch;
+        cb = cb * (1 - hatch) + INK[2] * hatch;
+      }
+
+      const e = Math.max(outline[i], detail[i]);
+      cr = cr * (1 - e) + INK[0] * e;
+      cg = cg * (1 - e) + INK[1] * e;
+      cb = cb * (1 - e) + INK[2] * e;
+
+      const grain = (hash(x, y) - 0.5) * 10;
       const p = i * 4;
-      out[p] = (wr * (1 - lift) + PAPER[0] * lift) * s + grain;
-      out[p + 1] = (wg * (1 - lift) + PAPER[1] * lift) * s + grain;
-      out[p + 2] = (wb * (1 - lift) + PAPER[2] * lift) * s + grain;
+      out[p] = cr + grain;
+      out[p + 1] = cg + grain;
+      out[p + 2] = cb + grain;
       out[p + 3] = 255;
     }
   }
@@ -1770,6 +2029,9 @@ function renderTray() {
     img.alt = 'a sticker';
     btn.appendChild(img);
     carry(btn, sticker);
+    btn.addEventListener('keydown', (e) => {
+      if (e.key === 'Delete' || e.key === 'Backspace') throwAway(sticker.id);
+    });
     tray.appendChild(btn);
   });
 }
@@ -1796,10 +2058,52 @@ stickerInput.addEventListener('change', async () => {
   }
 });
 
+// ---- throwing stickers away -----------------------------------------------
+const bin = document.getElementById('bin');
+
+function showBin(on) {
+  if (on === !bin.hidden) return;
+  bin.hidden = !on;
+  if (!on) bin.classList.remove('hot');
+}
+
+function overBin(e) {
+  const r = bin.getBoundingClientRect();
+  const slack = 18; // generous: you're aiming with a sticker, not a cursor
+  return (
+    e.clientX >= r.left - slack && e.clientX <= r.right + slack &&
+    e.clientY >= r.top - slack && e.clientY <= r.bottom + slack
+  );
+}
+
+// out of the drawer for good; copies already stuck on a board stay put
+function throwAway(id) {
+  store.stickers = store.stickers.filter((s) => s.id !== id);
+  save();
+  renderTray();
+  say('sticker thrown away');
+  setTimeout(() => say(''), 1800);
+}
+
+// off a board: the stuck copy goes, the drawer keeps its own
+function peel(id) {
+  if (zoomedId === id) zoomOut();
+  store.stuck = store.stuck.filter((s) => s.id !== id);
+  delete store.positions[id];
+  save();
+  const entry = items.get(id);
+  if (entry) {
+    entry.el.remove();
+    items.delete(id);
+  }
+  boardEmpty.hidden = items.size > 0;
+}
+
 // ---- carrying one to the board --------------------------------------------
 function carry(btn, sticker) {
   let ghost = null;
   let pointerId = null;
+  let holding = null;
 
   btn.addEventListener('pointerdown', (e) => {
     if (e.button && e.button !== 0) return;
@@ -1807,6 +2111,8 @@ function carry(btn, sticker) {
     try {
       btn.setPointerCapture(pointerId);
     } catch (err) {}
+    // the bin comes up once it's clear this is a hold, not a tap
+    holding = setTimeout(() => showBin(true), 220);
 
     ghost = el('div', 'sticker-ghost');
     const img = el('img');
@@ -1821,7 +2127,11 @@ function carry(btn, sticker) {
     if (e.pointerId !== pointerId || !ghost) return;
     ghost.style.left = e.clientX + 'px';
     ghost.style.top = e.clientY + 'px';
-    board.classList.toggle('taking-sticker', overBoard(e));
+    showBin(true);
+    const binning = overBin(e);
+    bin.classList.toggle('hot', binning);
+    ghost.classList.toggle('binning', binning);
+    board.classList.toggle('taking-sticker', !binning && overBoard(e));
   });
 
   function overBoard(e) {
@@ -1832,10 +2142,17 @@ function carry(btn, sticker) {
   function drop(e) {
     if (e.pointerId !== pointerId) return;
     pointerId = null;
+    clearTimeout(holding);
+    const binning = !bin.hidden && overBin(e);
+    showBin(false);
     board.classList.remove('taking-sticker');
     if (ghost) {
       ghost.remove();
       ghost = null;
+    }
+    if (binning) {
+      throwAway(sticker.id);
+      return;
     }
     if (!overBoard(e)) return;
 
