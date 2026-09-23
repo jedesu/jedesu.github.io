@@ -81,6 +81,12 @@ function tripName(trip) {
   return trip.region ? trip.place + ', ' + trip.region : trip.place;
 }
 
+// Your trip photos are meant to be doodles already — make them in the studio
+// ("make a sticker", draw it, then "save image") and drop the file into
+// assets/trips/ — so they're shown exactly as they are. Set this to true if you
+// list plain photos instead and want the site's quick filter run over them.
+const REDRAW_TRIP_PHOTOS = false;
+
 let pickedTrip = 0;
 
 // The globe sits on the left; whichever trip is picked hangs to the right of it.
@@ -112,6 +118,7 @@ function tripItems() {
       kind: 'polaroid',
       small: true,
       src: src,
+      doodled: !REDRAW_TRIP_PHOTOS,
       caption: src ? trip.place : trip.place + ' ?',
       empty: !src,
       x: SPOTS[i].x,
@@ -1366,34 +1373,6 @@ document.querySelectorAll('[data-add]').forEach((btn) => {
   });
 });
 
-fileInput.addEventListener('change', async () => {
-  const file = fileInput.files && fileInput.files[0];
-  fileInput.value = '';
-  if (!file || file.type.indexOf('image/') !== 0) return;
-
-  const photos = store.guests.filter((g) => g.kind === 'polaroid').length;
-  if (photos >= MAX_PHOTOS) dropOldestPhoto();
-
-  // drawn once here and stored drawn, so it never has to be redone on display;
-  // jpeg because the paper grain makes png several times the size
-  let src;
-  try {
-    src = (await doodleFile(file)).toDataURL('image/jpeg', 0.86);
-  } catch (e) {
-    return;
-  }
-
-  addGuestItem({
-    id: newId(),
-    kind: 'polaroid',
-    src: src,
-    doodled: true,
-    caption: (file.name || '').replace(/\.[^.]+$/, '').slice(0, 28),
-    rot: (Math.random() - 0.5) * 10,
-    tape: Math.random() < 0.45,
-    pin: '#2f6fb0',
-  });
-});
 
 // ---------------------------------------------------------------------------
 // Doodles
@@ -2006,14 +1985,6 @@ function stickerFrame(art) {
   return out;
 }
 
-async function makeSticker(file) {
-  say('drawing it…');
-  const framed = stickerFrame(await doodleFile(file, STICKER_PX));
-  say('');
-  // webp keeps the rounded corners and is far smaller than png; browsers that
-  // can't write it hand back a png instead
-  return framed.toDataURL('image/webp', 0.9);
-}
 
 // ---- the drawer -----------------------------------------------------------
 function renderTray() {
@@ -2038,25 +2009,6 @@ function renderTray() {
 
 document.getElementById('make-sticker').addEventListener('click', () => stickerInput.click());
 
-stickerInput.addEventListener('change', async () => {
-  const file = stickerInput.files && stickerInput.files[0];
-  stickerInput.value = '';
-  if (!file || file.type.indexOf('image/') !== 0) return;
-
-  try {
-    const src = await makeSticker(file);
-    store.stickers.push({ id: 's' + newId(), src: src });
-    while (store.stickers.length > MAX_STICKERS) store.stickers.shift();
-    if (!save()) {
-      store.stickers.shift();
-      save();
-      say('the drawer is full, so the oldest sticker made way for this one', true);
-    }
-    renderTray();
-  } catch (err) {
-    say("that photo couldn't be turned into a sticker", true);
-  }
-});
 
 // ---- throwing stickers away -----------------------------------------------
 const bin = document.getElementById('bin');
@@ -2192,6 +2144,223 @@ function carry(btn, sticker) {
 }
 
 renderTray();
+
+// ---- AI doodles, through Puter ---------------------------------------------
+// Puter puts image models behind a free allowance on each person's own Puter
+// account, so the site needs no key and no server, and never pays: whoever
+// makes a doodle spends their own allowance. The first time, Puter shows its
+// own box asking them to continue and sign in. Its library only loads when
+// someone actually asks for a doodle, so a visitor who never does never sees it.
+//
+// If they say no, or anything fails, the quick version — the free filter above,
+// which runs on their device — is always there instead.
+const PUTER_SRC = 'https://js.puter.com/v2/';
+const AI_MODEL = 'gemini-2.5-flash-image'; // or 'gpt-image-2.5-flare'
+const AI_TEST_MODE = false; // true: Puter returns a sample picture and spends nothing
+const AI_PROMPT = [
+  'Redraw this photo as a cute hand-drawn felt-tip marker doodle.',
+  'Thick, slightly wobbly dark grey marker outlines with rounded ends.',
+  'Fill every area with visible scribbled marker strokes, with the paper showing between them.',
+  'Flat colours: no gradients, no shading, no photographic texture.',
+  'Draw people simple and cute: round heads, dot eyes, a small curved smile, simple hair shapes;',
+  'keep their clothes, colours and poses.',
+  'Simplify the background: trees as scribbled green blobs, buildings as simple boxes,',
+  'crowds as small simple figures. Keep important signs or text, hand-lettered.',
+  'Warm off-white paper background with a faint paper texture.',
+  'Keep the same composition and framing as the photo. No border, no added text, no signature.',
+].join(' ');
+
+let puterReady = null;
+function loadPuter() {
+  if (window.puter) return Promise.resolve(window.puter);
+  if (!puterReady) {
+    puterReady = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = PUTER_SRC;
+      s.onload = () => resolve(window.puter);
+      s.onerror = () => {
+        puterReady = null; // offline or blocked: let a later try have another go
+        reject(new Error('puter could not load'));
+      };
+      document.head.appendChild(s);
+    });
+  }
+  return puterReady;
+}
+
+// Whatever Puter hands back — an <img>, or a url — turned into a canvas we can
+// shrink and store. Fetching it as a blob first keeps the canvas readable.
+async function readResult(result) {
+  const src = typeof result === 'string' ? result : result && result.src;
+  if (!src) throw new Error('no picture came back');
+  let img;
+  try {
+    const url = URL.createObjectURL(await (await fetch(src)).blob());
+    img = await loadImage(url);
+  } catch (err) {
+    img = await loadImage(src);
+  }
+  return drawToCanvas(img, 1024);
+}
+
+async function aiDoodle(photo) {
+  const p = await loadPuter();
+  const result = AI_TEST_MODE
+    ? await p.ai.txt2img(AI_PROMPT, true)
+    : await p.ai.txt2img({ prompt: AI_PROMPT, model: AI_MODEL, input_image: photo });
+  return readResult(result);
+}
+
+// ---- the doodle studio ------------------------------------------------------
+// One panel for both ways a photo comes in: "make a sticker" and "add photo".
+// Pick a photo, see it, choose the AI drawing or the quick version, look at
+// what comes back, then use it, try again, or save it to your computer.
+const studio = document.getElementById('studio');
+const studioTitle = document.getElementById('studio-title');
+const studioBefore = document.getElementById('studio-before');
+const studioAfter = document.getElementById('studio-after');
+const studioStatus = document.getElementById('studio-status');
+const studioDraw = document.getElementById('studio-draw');
+const studioQuick = document.getElementById('studio-quick');
+const studioUse = document.getElementById('studio-use');
+const studioAgain = document.getElementById('studio-again');
+const studioSave = document.getElementById('studio-save');
+let studioJob = null; // { purpose, name, photo (data url), result (canvas) }
+
+function studioState(state, text) {
+  studio.dataset.state = state;
+  studioStatus.textContent = text || '';
+  const busy = state === 'drawing';
+  studioDraw.disabled = busy;
+  studioQuick.disabled = busy;
+}
+
+async function openStudio(file, purpose) {
+  const url = URL.createObjectURL(file);
+  let img;
+  try {
+    img = await loadImage(url);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+  // 1024 is plenty for the model to work from, and keeps the upload small
+  const photo = drawToCanvas(img, 1024).toDataURL('image/jpeg', 0.9);
+  studioJob = {
+    purpose: purpose,
+    name: (file.name || '').replace(/\.[^.]+$/, '').slice(0, 28),
+    photo: photo,
+    result: null,
+  };
+  studioTitle.textContent = purpose === 'sticker' ? 'make a sticker' : 'pin a photo';
+  studioBefore.src = photo;
+  studioAfter.removeAttribute('src');
+  studioState(
+    'ready',
+    'an AI redraws it as a marker doodle. your photo is sent to Puter to do that — the first ' +
+      'time, it asks you to sign in (free). the quick version stays on your device.'
+  );
+  studio.hidden = false;
+}
+
+function closeStudio() {
+  studio.hidden = true;
+  studioJob = null;
+}
+
+function showResult(canvas, note, method) {
+  studioJob.result = canvas;
+  studioAgain.textContent = method === 'ai' ? 'try again' : 'draw it with AI';
+  studioAfter.src = canvas.toDataURL('image/jpeg', 0.9);
+  studioSave.href = canvas.toDataURL('image/png');
+  studioSave.download = (studioJob.name || 'doodle') + '-doodle.png';
+  studioState('done', note || '');
+}
+
+async function drawWithAI() {
+  if (!studioJob) return;
+  const job = studioJob;
+  studioState('drawing', 'drawing it… this usually takes 10–30 seconds');
+  try {
+    const canvas = await aiDoodle(job.photo);
+    if (studioJob !== job) return; // closed while it was drawing
+    showResult(canvas, '', 'ai');
+  } catch (err) {
+    if (studioJob !== job) return;
+    // said no to Puter, out of allowance, or offline: the quick one still works
+    studioState('ready', "the AI couldn't draw it this time — try the quick version, or try again");
+  }
+}
+
+async function drawQuick() {
+  if (!studioJob) return;
+  const job = studioJob;
+  studioState('drawing', 'drawing it…');
+  try {
+    const canvas = await doodleCanvas(await loadImage(job.photo), 1024);
+    if (studioJob !== job) return;
+    showResult(canvas, 'the quick version — made on your device, nothing uploaded', 'quick');
+  } catch (err) {
+    if (studioJob !== job) return;
+    studioState('ready', "that photo couldn't be drawn");
+  }
+}
+
+function useResult() {
+  if (!studioJob || !studioJob.result) return;
+  const job = studioJob;
+  closeStudio();
+
+  if (job.purpose === 'sticker') {
+    const src = stickerFrame(drawToCanvas(job.result, STICKER_PX)).toDataURL('image/webp', 0.9);
+    store.stickers.push({ id: 's' + newId(), src: src });
+    while (store.stickers.length > MAX_STICKERS) store.stickers.shift();
+    if (!save()) {
+      store.stickers.shift();
+      save();
+      say('the drawer is full, so the oldest sticker made way for this one', true);
+    }
+    renderTray();
+    return;
+  }
+
+  // a photo for the guestbook: stored already drawn, so it's never redone
+  const photos = store.guests.filter((g) => g.kind === 'polaroid').length;
+  if (photos >= MAX_PHOTOS) dropOldestPhoto();
+  addGuestItem({
+    id: newId(),
+    kind: 'polaroid',
+    src: drawToCanvas(job.result, DOODLE_PX).toDataURL('image/jpeg', 0.86),
+    doodled: true,
+    caption: job.name,
+    rot: (Math.random() - 0.5) * 10,
+    tape: Math.random() < 0.45,
+    pin: '#2f6fb0',
+  });
+}
+
+studioDraw.addEventListener('click', drawWithAI);
+studioAgain.addEventListener('click', drawWithAI);
+studioQuick.addEventListener('click', drawQuick);
+studioUse.addEventListener('click', useResult);
+document.getElementById('studio-cancel').addEventListener('click', closeStudio);
+studio.addEventListener('click', (e) => {
+  if (e.target === studio && studio.dataset.state !== 'drawing') closeStudio();
+});
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !studio.hidden && studio.dataset.state !== 'drawing') closeStudio();
+});
+
+function takePhoto(input, purpose) {
+  input.addEventListener('change', () => {
+    const file = input.files && input.files[0];
+    input.value = '';
+    if (!file || file.type.indexOf('image/') !== 0) return;
+    openStudio(file, purpose).catch(() => say("that photo couldn't be opened", true));
+  });
+}
+
+takePhoto(stickerInput, 'sticker');
+takePhoto(fileInput, 'photo');
 
 // ---- go --------------------------------------------------------------------
 window.addEventListener('resize', fit);

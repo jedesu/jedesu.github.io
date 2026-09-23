@@ -70,8 +70,8 @@
 
     <div class="tray" id="tray">
       <p class="tray-empty" id="tray-empty">
-        turn a photo into a doodle sticker — it's drawn on your own device, the
-        photo is never uploaded
+        turn a photo into a doodle sticker — an AI redraws it, or make a quick
+        one right on your device
       </p>
     </div>
 
@@ -170,6 +170,43 @@
     <div class="compose-actions">
       <button type="button" class="ghost" id="compose-cancel">cancel</button>
       <button type="button" class="solid" id="compose-pin">pin it</button>
+    </div>
+  </div>
+</div>
+
+<!-- the doodle studio: a photo comes in, a drawing goes out -->
+<div class="studio-layer" id="studio" hidden data-state="ready">
+  <div class="studio" role="dialog" aria-modal="true" aria-labelledby="studio-title">
+    <h2 class="compose-title" id="studio-title">make a sticker</h2>
+
+    <div class="studio-pair">
+      <figure>
+        <div class="studio-frame"><img id="studio-before" alt="the photo you picked"></div>
+        <figcaption>photo</figcaption>
+      </figure>
+      <span class="studio-arrow" aria-hidden="true">→</span>
+      <figure>
+        <div class="studio-frame studio-out">
+          <img id="studio-after" alt="the doodle">
+          <span class="studio-spin" aria-hidden="true"></span>
+        </div>
+        <figcaption>doodle</figcaption>
+      </figure>
+    </div>
+
+    <p class="studio-status" id="studio-status" aria-live="polite"></p>
+
+    <div class="studio-actions">
+      <button type="button" class="ghost" id="studio-cancel">cancel</button>
+      <span class="studio-when-ready">
+        <button type="button" class="ghost" id="studio-quick">quick version</button>
+        <button type="button" class="solid" id="studio-draw">draw it</button>
+      </span>
+      <span class="studio-when-done">
+        <a class="ghost" id="studio-save" href="#" download>save image</a>
+        <button type="button" class="ghost" id="studio-again">try again</button>
+        <button type="button" class="solid" id="studio-use">use it</button>
+      </span>
     </div>
   </div>
 </div>
