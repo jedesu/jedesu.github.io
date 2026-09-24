@@ -72,14 +72,19 @@ body {
 }
 
 .top nav a {
+  /* padded out to a comfortable thumb-sized target, without moving anything */
+  padding: 13px 4px;
+  margin: -13px -4px;
   color: var(--muted);
   text-decoration: none;
   font-size: 14px;
   transition: color 0.15s ease;
 }
 
-.top nav a:hover {
-  color: var(--acc);
+@media (hover: hover) {
+  .top nav a:hover {
+    color: var(--acc);
+  }
 }
 
 /* ---- hero ---- */
@@ -117,9 +122,13 @@ body {
   transition: transform 0.2s ease, color 0.2s ease;
 }
 
-.name span:hover {
-  transform: translateY(-0.1em);
-  color: var(--acc);
+/* hover effects only where there's a real pointer, so a tap on a phone
+   doesn't leave a letter or card stuck halfway through one */
+@media (hover: hover) {
+  .name span:hover {
+    transform: translateY(-0.1em);
+    color: var(--acc);
+  }
 }
 
 .play .name span {
@@ -169,6 +178,8 @@ body {
   background: var(--card);
   border-radius: 22px;
   padding: 26px;
+  /* on a phone, a sideways drag lights it up; an up-down one still scrolls */
+  touch-action: pan-y pinch-zoom;
 }
 
 .portrait {
@@ -192,6 +203,7 @@ body {
   pointer-events: none;
   color: var(--acc);
   text-shadow: 0 0 6px rgba(36, 99, 235, 0.35);
+  transition: opacity 0.5s ease;
   -webkit-mask-image: radial-gradient(circle 110px at var(--mx, -300px) var(--my, -300px), #000 0%, rgba(0, 0, 0, 0.55) 45%, transparent 100%);
   mask-image: radial-gradient(circle 110px at var(--mx, -300px) var(--my, -300px), #000 0%, rgba(0, 0, 0, 0.55) 45%, transparent 100%);
 }
@@ -317,21 +329,33 @@ body {
   top: -6px;
 }
 
-.links a:hover,
 .links a:focus-visible {
   padding-left: 12px;
   outline: none;
 }
 
-.links a:hover::before,
 .links a:focus-visible::before {
   transform: scaleX(1);
 }
 
-.links a:hover b,
 .links a:focus-visible b {
   color: var(--acc);
   transform: translate(2px, -2px);
+}
+
+@media (hover: hover) {
+  .links a:hover {
+    padding-left: 12px;
+  }
+
+  .links a:hover::before {
+    transform: scaleX(1);
+  }
+
+  .links a:hover b {
+    color: var(--acc);
+    transform: translate(2px, -2px);
+  }
 }
 
 .links .off {
@@ -353,10 +377,12 @@ body {
   transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
-.now li:hover {
-  transform: translateY(-3px);
-  border-color: var(--acc-line);
-  box-shadow: 0 12px 26px rgba(20, 20, 40, 0.07);
+@media (hover: hover) {
+  .now li:hover {
+    transform: translateY(-3px);
+    border-color: var(--acc-line);
+    box-shadow: 0 12px 26px rgba(20, 20, 40, 0.07);
+  }
 }
 
 .now-label {

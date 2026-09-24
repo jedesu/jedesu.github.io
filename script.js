@@ -74,16 +74,26 @@ fetch('assets/portrait.txt')
 document.fonts.ready.then(fit);
 window.addEventListener('resize', fit);
 
+let dimming = null;
 function shine(e) {
+  clearTimeout(dimming);
+  glow.style.opacity = '1';
   const r = glow.getBoundingClientRect();
   glow.style.setProperty('--mx', e.clientX - r.left + 'px');
   glow.style.setProperty('--my', e.clientY - r.top + 'px');
 }
 card.addEventListener('pointermove', shine);
 card.addEventListener('pointerdown', shine);
-card.addEventListener('pointerleave', () => {
-  glow.style.setProperty('--mx', '-300px');
-  glow.style.setProperty('--my', '-300px');
+card.addEventListener('pointerleave', (e) => {
+  if (e.pointerType === 'mouse') {
+    glow.style.setProperty('--mx', '-300px');
+    glow.style.setProperty('--my', '-300px');
+    return;
+  }
+  // a finger lifted: let the light linger a moment, then fade it out
+  dimming = setTimeout(() => {
+    glow.style.opacity = '0';
+  }, 900);
 });
 
 // ---- the name, letter by letter ------------------------------------------
