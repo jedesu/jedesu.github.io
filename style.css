@@ -430,6 +430,55 @@ body {
   .foot { padding: 32px 20px 56px; }
 }
 
+/* ---- the cursor: a black dot, with a smooth line trailing behind it ---- */
+.cursor-dot,
+.cursor-trail {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 100;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.cursor-dot {
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: var(--text);
+  transition: opacity 0.2s ease, width 0.2s ease, height 0.2s ease, margin 0.2s ease;
+}
+
+.cursor-trail {
+  width: 100vw;
+  height: 100vh;
+}
+
+/* only with a real mouse: the dot stands in for the arrow */
+.has-cursor,
+.has-cursor a {
+  cursor: none;
+}
+
+.has-cursor .cursor-dot,
+.has-cursor .cursor-trail {
+  opacity: 1;
+}
+
+.has-cursor.cursor-away .cursor-dot,
+.has-cursor.cursor-away .cursor-trail {
+  opacity: 0;
+}
+
+/* over a link the dot grows a little */
+.cursor-dot.on-link {
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .play .name span,

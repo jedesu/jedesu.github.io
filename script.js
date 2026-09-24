@@ -121,3 +121,78 @@ if ('IntersectionObserver' in window) {
 } else {
   sections.forEach((s) => s.classList.add('in'));
 }
+
+// ---- the cursor: a black dot, and a smooth line that trails after it ------
+// The line is a chain of points: the first chases the mouse, and each of the
+// rest chases the one before it, so the tail curves after the dot and
+// shrinks back into it when the mouse stops. Only with a real mouse; on a
+// phone or tablet nothing changes.
+if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+  const dot = document.getElementById('cursor-dot');
+  const trail = document.getElementById('cursor-trail');
+  const pen = trail.getContext('2d');
+  const at = { x: -100, y: -100 };
+  const LINKS = 22;
+  let chain = [];
+  let started = false;
+  let dpr = 1;
+
+  function size() {
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    trail.width = innerWidth * dpr;
+    trail.height = innerHeight * dpr;
+  }
+  size();
+  window.addEventListener('resize', size);
+
+  document.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    at.x = e.clientX;
+    at.y = e.clientY;
+    if (!started) {
+      started = true;
+      chain = Array.from({ length: LINKS }, () => ({ x: at.x, y: at.y }));
+      document.body.classList.add('has-cursor');
+      requestAnimationFrame(draw);
+    }
+    document.body.classList.remove('cursor-away');
+    dot.style.transform = 'translate(' + at.x + 'px,' + at.y + 'px)';
+    dot.classList.toggle('on-link', !!e.target.closest('a'));
+  });
+  document.addEventListener('mouseleave', () => document.body.classList.add('cursor-away'));
+
+  function draw() {
+    // each point closes part of the gap to the one ahead of it
+    let lead = at;
+    for (const p of chain) {
+      p.x += (lead.x - p.x) * (quiet ? 1 : 0.42);
+      p.y += (lead.y - p.y) * (quiet ? 1 : 0.42);
+      lead = p;
+    }
+    pen.setTransform(dpr, 0, 0, dpr, 0, 0);
+    pen.clearRect(0, 0, innerWidth, innerHeight);
+    pen.lineCap = 'round';
+    pen.lineJoin = 'round';
+    const pts = [at].concat(chain);
+    // join the dot to where the curve begins
+    pen.beginPath();
+    pen.moveTo(at.x, at.y);
+    pen.lineTo((at.x + chain[0].x) / 2, (at.y + chain[0].y) / 2);
+    pen.strokeStyle = 'rgb(17,17,20)';
+    pen.lineWidth = 5.5;
+    pen.stroke();
+    // drawn in short pieces so it can taper and fade toward the tail
+    for (let i = 1; i < pts.length - 1; i++) {
+      const t = i / (pts.length - 1);
+      const a = pts[i - 1], b = pts[i], c = pts[i + 1];
+      pen.beginPath();
+      pen.moveTo((a.x + b.x) / 2, (a.y + b.y) / 2);
+      pen.quadraticCurveTo(b.x, b.y, (b.x + c.x) / 2, (b.y + c.y) / 2);
+      const shade = Math.round(17 + t * t * 220); // solid greys, so overlaps don't bead
+      pen.strokeStyle = 'rgb(' + shade + ',' + shade + ',' + (shade + 3) + ')';
+      pen.lineWidth = 5 * (1 - t) + 0.5;
+      pen.stroke();
+    }
+    requestAnimationFrame(draw);
+  }
+}
