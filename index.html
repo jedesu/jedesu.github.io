@@ -30,7 +30,7 @@
       <p class="hi">hi ! i'm</p>
       <h1 class="name" id="name">julianne edes</h1>
       <p class="role">product &amp; project manager</p>
-      <p class="pill"><i></i> building an adhd productivity app</p>
+      <p class="pill"><i></i> building mingo, a speak-to-wake alarm</p>
     </div>
     <figure class="portrait-card" id="portrait-card">
       <pre class="portrait" id="portrait" role="img" aria-label="ascii-art portrait of julianne"></pre>
@@ -73,7 +73,63 @@
         </a>
       </li>
       <li>
-        <span class="off"><span>projects</span><em>coming soon</em><b aria-hidden="true">·</b></span>
+        <details class="group" id="projects">
+          <summary><span>projects</span><em><span class="when-shut">open</span><span class="when-open">close</span></em><b class="group-arrow" aria-hidden="true">↗</b></summary>
+          <div class="group-list">
+            <details class="project">
+              <summary>
+                <span class="project-name">mingo</span>
+                <em>language-learning alarm clock</em>
+                <b class="project-toggle" aria-hidden="true">+</b>
+              </summary>
+
+              <div class="project-inner">
+                <div class="project-head">
+                  <p class="project-pitch">a language-learning alarm clock app. you wake up by speaking the language you're studying, with mandarin, japanese and korean at launch.</p>
+                  <span class="tag"><i></i> working prototype · ios</span>
+                </div>
+
+                <div class="project-body">
+                  <div>
+                    <h4>the problem</h4>
+                    <p>language apps are easy to ignore. your alarm isn't.</p>
+                  </div>
+                  <div>
+                    <h4>how it works</h4>
+                    <p>study short themed word packs. when the alarm rings, say three words you've learned out loud to turn it off.</p>
+                  </div>
+                  <div class="project-wide">
+                    <h4>how i'm building it</h4>
+                    <p>mingo is my original idea, built with AI-assisted development. i own the product: the problem, the research, the scope, the roadmap and every product decision. i direct an AI coding assistant (claude code) to write the swift, then review its work against my requirements and test every step on a real iphone.</p>
+                  </div>
+                  <div>
+                    <h4>decisions i made</h4>
+                    <ul class="dash">
+                      <li><b>designing around a platform limit.</b> ios always shows a stop button, so mingo re-rings a set number of times and keeps its own sound playing until the challenge is done.</li>
+                      <li><b>learn first, then wake up.</b> the alarm only asks words you've already studied, never new ones.</li>
+                      <li><b>never stuck.</b> every challenge has a fallback that ends in an emergency exit.</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <h4>roadmap</h4>
+                    <ul class="checks">
+                      <li class="done">alarm that rings through silent &amp; focus, with a re-ring loop</li>
+                      <li class="done">speech check that matches by pronunciation, starting with mandarin</li>
+                      <li class="done">learn tab: flashcards, audio and six quiz types</li>
+                      <li class="done">spaced repetition that schedules reviews</li>
+                      <li>japanese &amp; korean for launch</li>
+                      <li>alarm settings: time, repeat days, sounds</li>
+                      <li>free / pro tiers and tests with real learners</li>
+                      <li>design pass, onboarding, then the app store</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <p class="project-foot"><span>my role: founder &amp; product owner</span><span>swift · swiftui · alarmkit · claude code</span></p>
+              </div>
+            </details>
+          </div>
+        </details>
       </li>
     </ul>
   </section>
@@ -83,7 +139,7 @@
     <ul class="now">
       <li>
         <span class="now-label">working on</span>
-        <span class="now-title">an adhd productivity app, plus this website</span>
+        <span class="now-title">mingo, an alarm that teaches you a language</span>
       </li>
       <li>
         <span class="now-label">reading</span>
